@@ -52,6 +52,7 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE){
 
     error <- if(errDist=='norm') rnorm(2*n,0,sqrt(0.5))
              else if(errDist=='mix') c(rnorm(3*n/2,-1/3,sqrt(1/6)),rnorm(n/2,1,sqrt(1/6)))
+             else if(errDist=="lognorm") exp(rnorm(2*n,0,sqrt(log((1+sqrt(3))/2))))
              else runif(2*n,-sqrt(6)/2,sqrt(6)/2)
     error <- error-mean(error)
 
@@ -87,10 +88,12 @@ simOneBayes <- function(dat){
 
     mest <- effs(dat)
     BAYES <- bayes(dat,chains=2,iter=3000,warmup=1000)
+    PSW <- psw(dat)
 
     list(
         true=attr(dat,'trueEffs'),
         mest=mest,
+        psw=PSW,
         bayes=BAYES,
         facs=attr(dat,'facs')
     )
@@ -130,8 +133,8 @@ fullsim <- function(nsim,
                     mu01=c(0,.3),#sepTs=c(TRUE,FALSE),
                     mu10=c(0,.3),#sepCs=c(TRUE,FALSE),
                     mu11=.3,#effs=c(TRUE,FALSE),
-                    errDist=c('norm','mix','unif'),
-                    b1s=c(0,0.2,0.5),
+                    errDist=c('norm','lognorm','unif'),
+                    b1s=c(0,0.3,0.5),
                     ext='',
                     intS=c(TRUE,FALSE),
                     intZ=c(TRUE,FALSE),
