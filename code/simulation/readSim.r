@@ -1,45 +1,62 @@
-library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(purrr)
 library(parallel)
 
 source('code/simulation/readSimFuncs.r')
 
 #### read, process results from main simulation
-print(load('simResults/pswResults.RData'))
+#print(load('simResults/pswResults.RData'))
 
-if(file.exists("simResults/fullResults.RData")){
-    load("simResults/fullResults.RData")
+if(file.exists("simResults/mainResults.RData")){
+    load("simResults/mainResults.RData")
 } else{
-    results=loadRes(pswResults=pswResults)
-    save(results,file='simResults/fullResults.RData')
+    results=loadRes()
+    save(results,file='simResults/mainResults.RData')
 }
 
+if(file.exists("simResults/nsResults.RData")){
+    load("simResults/nsResults.RData")
+} else{
+    resultsNs=loadRes(ext2='ns')
+    save(resultsNs,file='simResults/nsResults.RData')
+}
 
-resultsN100=loadRes(ext2='n100_mu01is0')
+if(file.exists("simResults/b1sResults.RData")){
+    load("simResults/b1sResults.RData")
+} else{
+    resultsB1s=loadRes(ext2='b1s')
+    save(resultsB1s,file='simResults/b1sResults.RData')
+}
+
+#resultsN100=loadRes(ext2='n100_mu01is0')
 #save(resultsN100,file='simResults/resultsN100.RData')
 
 
-resultsNs=loadRes(ext2="ns_mu01is0")
+#resultsNs=loadRes(ext2="ns")
 
-resultsB1s=loadRes(ext2='b1ss_mu01is0')
+#resultsB1s=loadRes(ext2="b1s")#s_mu01is0')
 
-resB101=loadRes(ext2="b01_mu01is0")
+#results=loadRes()
+
+#resB101=loadRes(ext2="b01_mu01is0")
 
 ### merge results by n
-load('simResults/casesns_mu01is0.RData')
+load("simResults/casesns.RData")#_mu01is0.RData')
 casesNs=cases
-load('simResults/casesn100.RData')
-casesN100=cases
+#load('simResults/casesn100.RData')
+#casesN100=cases
 load('simResults/cases.RData')
 
 resultsNs=bind_rows(
   resultsNs,
-  filter(resultsN100,mu01%in%resultsNs$mu01[1],
-         errDist%in%resultsNs$errDist,
-         b1%in%resultsNs$b1,
-         intS%in%resultsNs$intS,
-         intZ%in%resultsNs$intZ
-         ),
-  filter(results,mu01==resultsNs$mu01[1],
+  # filter(resultsN100,mu01%in%resultsNs$mu01[1],
+  #        errDist%in%resultsNs$errDist,
+  #        b1%in%resultsNs$b1,
+  #        intS%in%resultsNs$intS,
+  #        intZ%in%resultsNs$intZ
+  #        ),
+  filter(results,mu01%in%resultsNs$mu01[1],
          errDist%in%resultsNs$errDist,
          b1%in%resultsNs$b1,
          intS%in%resultsNs$intS,
@@ -47,16 +64,18 @@ resultsNs=bind_rows(
          ))%>%
     filter(estimator!="psw")
 
-save(resultsNs,file='simResults/resultsNs_mu01is0.RData')
+save(resultsNs,file='simResults/resultsNs.RData')
 
 ### merge results by B1s
 casesTot=cases
-load('simResults/casesb1ss_mu01is0.RData')
+load('simResults/casesb1s.RData')
 casesB1=cases
 
 resultsB1s=bind_rows(
     resultsB1s,
-    resB101,
-  filter(results,run%in%(left_join(casesB1[1,],casesTot%>%mutate(run=1:n())%>%select(-b1))%>%pull(run)))
+ #   resB101,
+  filter(results,run%in%(
+    left_join(casesB1[1,],casesTot%>%mutate(run=1:n())%>%select(-b1))%>%pull(run)
+    ))
   )
-save(resultsB1s,file='simResults/resultsB1s_mu01is0.RData')
+save(resultsB1s,file='simResults/resultsB1s.RData')

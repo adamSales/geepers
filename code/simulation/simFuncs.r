@@ -103,6 +103,8 @@ simOneBayes <- function(dat){
 oneCase <- function(nsim,ext,ncores,cl=NULL, facs){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
 
 #    print(Sys.time())
+    
+    clusterExport(cl,list="facs",envir=environment())
 
      datasets <-
      if(is.null(cl)) mclapply(1:nsim,function(i) do.call("makeDat",facs),mc.cores=ncores)
@@ -110,18 +112,31 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs){ #n,mu00,mu01,mu10,mu11,gumb,
 
     save(datasets,file=paste0('simData/dat',ext,'.RData'))
 
-    time <- system.time(
-        res <-
-	    if(is.null(cl)){
-		mclapply(
-			datasets,
+    clusterExport(cl,"datasets",envir=environment())
+
+    pb <- txtProgressBar(max = nsim, style = 3)
+    progress_fun <- function(nn) setTxtProgressBar(pb, nn)
+    opts <- list(progress = progress_fun)
+
+
+    startTime <- Sys.time()
+    res <-
+        if(is.null(cl)){
+	    	mclapply(
+		    	datasets,
                 	function(dat) try(simOneBayes(dat)),
                 	mc.cores=ncores
             		)
-	     } else
-	     	      parLapply(cl,datasets, function(dat) try(simOneBayes(dat)))
+	     } else{
+	     	    foreach(i = 1:nsim,
+                    .packages=c("sandwich","dplyr","rstan"),
+                    .options.snow = opts) %dopar% {
+                        try(simOneBayes(datasets[[i]]))
+                    }
+         }
+#                  parLapply(cl,datasets, function(dat) try(simOneBayes(dat)))
 
-    )
+    time <- Sys.time() - startTime
 #    print(time)
 
   attr(res,"time") <- time

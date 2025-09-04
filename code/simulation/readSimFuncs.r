@@ -42,35 +42,6 @@ psw1Proc=function(psw){
   )
 }
 
-bayesProc1 <- function(eff, res1) {
-  if (rownames(res1$mest)[3] == 'diff')
-    rownames(res1$mest)[3] <- 'effDiff'
-
-  res1$psw <- if('psw'%in% names(res1)) psw1Proc(res1$psw) else NULL
-
-
-  with(res1,
-   map_dfr(
-    if('psw'%in%names(res1)) list(bayes,mest,psw) else list(bayes,mest),
-    ~
-      tibble(
-       eff = eff,
-       pop = muEff(facs, eff),
-       samp = ifelse(eff == 'Diff', true['S1'] -true['S0'], true[paste0('S', eff)]),
-       estimator=ifelse('mean'%in%colnames(.),'bayes',ifelse('psw'%in%colnames(.),'psw','mest')),
-       est = .[paste0('eff', eff), ifelse('mean' %in% colnames(.), 'mean', 'estimates')],
-       se = .[paste0('eff', eff), ifelse('sd' %in%colnames(.), 'sd', 'SE')],
-       CInormL = est - 2 *se,
-       CInormU = est + 2 *se,
-       CIpercL = ifelse('2.5%' %in% colnames(.), .[paste0('eff', eff), '2.5%'], CInormL),
-       CIpercU = ifelse('97.5%' %in% colnames(.), .[paste0('eff', eff), '97.5%'], CInormU),
-       rhat = bayes[paste0('eff', eff), 'Rhat'],
-       auc = attr(mest, 'auc')
-           )
-       ))
-}
-
-       
 
 proc1mest <- function(res1){
   tibble(
@@ -132,46 +103,26 @@ proc <- function(res){
   )
 }
 
-bayesProc <- function(res1,facs){
-  if(is.null(res1)) return(as_tibble(facs))
-  if(is.null(res1$mest)) return(as_tibble(facs))
-    if(inherits(res1,'try-error')) return(as_tibble(facs))
-    facs%>%
-        rbind()%>%
-        as_tibble()%>%
-        bind_cols(
-            map_dfr(c(0,1,'Diff'),bayesProc1,res1=res1)
-        )
-}
-
 
 
 loadRes <- function(ext1='',ext2='',pswResults){
     if(file.exists(paste0('simResults',ext1,'/cases',ext2,'.RData'))){
         load(paste0('simResults',ext1,'/cases',ext2,'.RData'))
-    } else cases <- cbind(1:sum(grepl(paste0('sim[0-9]+',ext2,'\\.RData'),list.files(paste0("simResults",ext1,"/")))))
+    } else cases <- cbind(
+      1:sum(grepl(paste0('sim[0-9]+',ext2,'\\.RData'),
+        list.files(paste0("simResults",ext1,"/")))))
 
-    results <- list()
-#    summ <- NULL
-    #fn <- list.files('./simResults','sim[[:alnum:]]+.RData')
-    for(i in 1:nrow(cases)){#length(fn)){
-        #if(i %% 10==0)
-            cat(round(i/nrow(cases)*100),'%',sep='')#length(fn)*100), '% ')
-      load(paste0('simResults',ext1,'/sim',i,ext2,'.RData'))#fn[i]))
-      if(!missing(pswResults))
-        res <- map(1:length(res),
-                   ~append(res[[.]],list(psw=unlist(pswResults[[i]][.,]))))
-        #stopifnot(identical(facs,cases[i,]))
-      resT <- map_dfr(res,bayesProc,facs=facs)
+    cat(nrow(cases),' cases to process\n')
+    map_dfr(seq_len(nrow(cases)), function(i){
+      cat(i,' ',sep='')
+      load(paste0('simResults',ext1,'/sim',i,ext2,'.RData'))
+      resT <- proc(res)
       resT$run <- i
-      results[[i]] <- resT
-      rm(res,facs)
-    }
-
-    reduce(results,bind_rows)
+      resT})
 }
 
-bp <- function(pd,subset,facet,title=deparse(substitute(subset)),ylim,Labeller="label_value",labSize=5){
+bp <- function(pd,subset,facet,title=deparse(substitute(subset)),
+                ylim,Labeller="label_value",labSize=5){
 
 
   r <- if (missing(subset))

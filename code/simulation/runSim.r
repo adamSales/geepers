@@ -8,6 +8,9 @@ library(rstan)
 library(parallel)
 library(sandwich)
 library(purrr)
+library(snow)
+library(doSNOW)
+library(utils)
 
 rstan_options(auto_write = TRUE)
 
@@ -34,6 +37,8 @@ for (d in dirs) {
 #if(.Platform$OS.type=='windows' & ncore>1){
 print("making cluster")
 cl <- makeCluster(ncore)
+registerDoSNOW(cl)
+
 clusterEvalQ(cl,library(dplyr))
 clusterEvalQ(cl,library(rstan))
 clusterEvalQ(cl,rstan_options(auto_write=TRUE))
@@ -47,9 +52,9 @@ source('code/simulation/simFuncs.r')
 
 source('code/regression.r')
 
-
+set.seed(613)
 fullsim(nrep,ns=c(500),mu01=c(0),mu10=0,b1s=c(0,0.3,0.5),
-	ext='',cl=cl,ncores=ncore,start=1)
+	ext='',cl=cl,ncores=ncore,start=2)
 
 
 
