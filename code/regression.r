@@ -48,10 +48,11 @@ AUCmod <- function(mod){
     auc(mod$linear,1-mod$y)
 }
 
-datNames <- function(data,trt='Z',out='Y',use='S',block=NULL){
+datNames <- function(data,trt='Z',out='Y',use='S',clust=NULL,block=NULL){
   data$Y <- as.numeric(data[[out]])
   data$Z <- as.numeric(data[[trt]])
   data$S <- as.numeric(data[[use]])
+  data$clust <- if(is.character(clust)) data[[clust]] else clust
 
   data$S[data$Z==0] <- NA
 
@@ -134,15 +135,15 @@ sandwichMats <- function(psMod,outMod,data,clust=NULL,int=any(grepl(":x",names(c
         a11inv = bread(psMod)/sum(data$Z),
         a22inv = bread(outMod)/nrow(data),
         a21 = A21(psMod,outMod,data)/nrow(data),
-        b11=(if(is.null(clust)) meat(psMod) else meatCL(psMod,cluster=clust[data$Z==1]))*nrow(model.frame(psMod)),
-        b22 = (if(is.null(clust)) meat(outMod) else meatCL(outMod,cluster=clust))*nrow(data)#,adjust=TRUE)
+        b11=(if(is.null(clust)) meat(psMod) else meatCL(psMod,cluster=data[rownames(model.frame(psMod)),"clust"]))*nobs(psMod),
+        b22 = (if(is.null(clust)) meat(outMod) else meatCL(outMod,cluster=data$clust))*nrow(data)#,adjust=TRUE)
     )
-    out <- within(out,b12 <-
+    out <- within( out,b12 <-
         if(int){
             matrix(0,nrow(b11),ncol(b22))
         } else if(is.null(clust)) crossprod(efPS,efOut)/nrow(data)
-        else crossprod(apply(efPS,2L,rowsum,clust),
-                       apply(efOut,2L,rowsum,clust))/sum(data$Z==0)
+        else crossprod(apply(efPS,2L,rowsum,data$clust),
+                       apply(efOut,2L,rowsum,data$clust))/sum(data$Z==0)
         )
     out
 }
@@ -200,7 +201,7 @@ est <- function(data,covFormU=~x1+x2,covFormY=NULL,psMod=NULL,clust=NULL,intSx=N
 
   #if(!missing(psMod))
 
-  data <- datNames(data,trt=trt,out=out,use=use,block=block)
+  data <- datNames(data,trt=trt,out=out,use=use,block=block,clust=clust)
 
   Attach(pointEst(data=data,covFormU=covFormU,covFormY=covFormY,intSx=intSx,psMod=psMod))
 
@@ -262,8 +263,8 @@ A21 <- function(psMod,outMod,data){
   W0 <- model.matrix(update(formula(psMod),Y~.),data=data)[risp,]
 
   X0 <- model.matrix(outMod)[risp,
-                               -c(which(names(coef(outMod))%in%c('Z','Sp')),
-                                  grep('Z\\:|Sp\\:|\\:Z|\\:Sp',names(coef(outMod))),
+                               -c(which(names(coef(outMod))%in%c('Z','Sp',"Z:Sp")),
+                                  #grep('Z\\:|Sp\\:|\\:Z|\\:Sp',names(coef(outMod))),
                                   which(names(coef(outMod))=="(Intercept)"))]
 
   if(intSx) V0 <- cbind(model.matrix(outMod)[risp,grep('Sp\\:',names(coef(outMod)))])
@@ -273,15 +274,17 @@ A21 <- function(psMod,outMod,data){
   if(intSx) U <- U+(rbind(coef(outMod)[colnames(V0)])%*%t(V0))
 
   AA <- rbind(
-    -U,
-    Y0-(Q+2*p*U),
-    -Z*U,
-    Z*Y0-(Z*Q+2*p*Z*U),
+    `(Intercept)`=(-U)[1,],
+    Sp=(Y0-(Q+2*p*U))[1,],
+    Z=(-Z*U)[1,],
+    `Z:Sp`=(Z*Y0-(Z*Q+2*p*Z*U))[1,],
     -sweep(t(X0),2,U,"*")
   )
 
   if(intSx) AA <- rbind(AA,(Y0-Q-2*p*U)[rep(1,ncol(V0)),]*t(V0))
 
+  AA <- AA[names(coef(outMod)),] ## make sure the rows are in the same order as other matrices
+  
   DD <- W0*q
 
   AA%*%DD/nrow(X0)
