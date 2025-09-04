@@ -70,7 +70,67 @@ bayesProc1 <- function(eff, res1) {
        ))
 }
 
+       
 
+proc1mest <- function(res1){
+  tibble(
+    eff = c(0,1),
+    estimator= 'mest',
+    est = res1$mest[c("eff0","eff1"),"estimates"],
+    se = res1$mest[c("eff0","eff1"),"SE"],
+  )
+}
+
+proc1bayes <- function(res1){
+  tibble(
+    eff = c(0,1),
+    estimator= 'bayes',
+    est = res1$bayes[c("eff0","eff1"),"mean"],
+    se = res1$bayes[c("eff0","eff1"),"sd"],
+    CIpercL = res1$bayes[c("eff0","eff1"), '2.5%'],
+    CIpercU = res1$bayes[c("eff0","eff1"), '97.5%']
+  )
+}
+
+proc1psw <- function(res1){
+  if(is.null(res1$psw)) return(NULL)
+  tibble(
+    eff = c(0,1),
+    estimator= 'psw',
+    est = res1$psw[c("eff0","eff1")],
+    se = NA
+  )
+}
+
+proc1 <- function(res1){
+  if(is.null(res1)) return(NULL)
+  if(inherits(res1,'try-error')) return(NULL)
+
+  res <- bind_rows(
+    proc1mest(res1),
+    proc1bayes(res1),
+    proc1psw(res1)
+  )
+  res$pop = vapply(res$eff, muEff, facs=res1$facs, numeric(1))
+  res$samp <- unname(res1$true[paste0("S",res$eff)])
+  res$rhat <- unname(res1$bayes[paste0("eff",res$eff),"Rhat"])
+  res$auc <- attr(res1$mest, 'auc')
+
+  res
+}
+
+proc <- function(res){
+  cbind(
+    res[[1]]$facs,
+    map_dfr(res,proc1)%>%
+      mutate(
+        CInormL = est - 2 * se, 
+        CInormU = est + 2 * se,
+        CIpercL = ifelse(is.na(CIpercL), CInormL, CIpercL),
+        CIpercU = ifelse(is.na(CIpercU), CInormU, CIpercU)
+      )
+  )
+}
 
 bayesProc <- function(res1,facs){
   if(is.null(res1)) return(as_tibble(facs))
