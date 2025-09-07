@@ -132,18 +132,18 @@ sandwichMats <- function(psMod,outMod,data,clust=NULL,int=any(grepl(":x",names(c
     efOut <- estfun(outMod) ## psi2
 
     out <- list(
-        a11inv = bread(psMod)/sum(data$Z),
-        a22inv = bread(outMod)/nrow(data),
-        a21 = A21(psMod,outMod,data)/nrow(data),
-        b11=(if(is.null(clust)) meat(psMod) else meatCL(psMod,cluster=data[rownames(model.frame(psMod)),"clust"]))*nobs(psMod),
-        b22 = (if(is.null(clust)) meat(outMod) else meatCL(outMod,cluster=data$clust))*nrow(data)#,adjust=TRUE)
+        a11inv = bread(psMod)/nobs(psMod),
+        a22inv = bread(outMod)/nobs(outMod),
+        a21 = A21(psMod,outMod,data),#/nrow(data),
+        b11=(if(is.null(clust)) meatHC(psMod) else meatCL(psMod,cluster=data[rownames(model.frame(psMod)),"clust"]))*nobs(psMod),
+        b22 = (if(is.null(clust)) meatHC(outMod) else meatCL(outMod,cluster=data$clust))*nobs(outMod)
     )
     out <- within( out,b12 <-
         if(int){
             matrix(0,nrow(b11),ncol(b22))
-        } else if(is.null(clust)) crossprod(efPS,efOut)/nrow(data)
+        } else if(is.null(clust)) crossprod(efPS,efOut)#/nrow(data)
         else crossprod(apply(efPS,2L,rowsum,data$clust),
-                       apply(efOut,2L,rowsum,data$clust))/sum(data$Z==0)
+                       apply(efOut,2L,rowsum,data$clust))#/sum(data$Z==0)
         )
     out
 }
@@ -284,10 +284,10 @@ A21 <- function(psMod,outMod,data){
   if(intSx) AA <- rbind(AA,(Y0-Q-2*p*U)[rep(1,ncol(V0)),]*t(V0))
 
   AA <- AA[names(coef(outMod)),] ## make sure the rows are in the same order as other matrices
-  
+
   DD <- W0*q
 
-  AA%*%DD/nrow(X0)
+  AA%*%DD#/nrow(X0)
 }
 
 

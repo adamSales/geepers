@@ -37,9 +37,9 @@ source('code/simulation/readSimFuncs.r')
 
 #### after simulation results have been loaded and pre-processed...
 ## source('code/simulation/readSim.r')
-load('simResults/fullResults.RData')
-load('simResults/resultsNs_mu01is0.RData')
-load('simResults/resultsB1s_mu01is0.RData')
+load('simResults/mainResults.RData')
+load('simResults/resultsNs.RData')
+load('simResults/resultsB1s.RData')
 
 
 ###############################################################################
@@ -461,3 +461,4 @@ resultsB1s%>%
   ggplot(aes(as.factor(b1),auc))+geom_boxplot()+geom_point(aes(y=meanAUC))+geom_smooth(se=FALSE)+ylab('AUC')+xlab(bquote(alpha))
   ggsave('simFigs/alphaAUC.pdf',width=5,height=4)
                                         #  scale_y_continuous('Avg. AUC',seq(.5,1,.1))
+
