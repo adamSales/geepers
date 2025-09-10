@@ -48,8 +48,8 @@ PS_EMest <- function(data,psMod=NULL,covFormU = ~x1 + x2, covFormY = NULL,
 
     ## estimate principal scores
     if(is.null(psMod)){
+      psForm <- update(covFormU,S~.) 
       psMod=glm(psForm,data=data,subset=Z==1,family=binomial)
-      psForm <- update(covFormU,S~.)
     } 
     
     ## outcome modeling

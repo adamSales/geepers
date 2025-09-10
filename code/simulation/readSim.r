@@ -5,24 +5,25 @@ library(parallel)
 
 source('code/simulation/readSimFuncs.r')
 
+if(!exists("fromScratch")) fromScratch <- TRUE
 #### read, process results from main simulation
 #print(load('simResults/pswResults.RData'))
 
-if(file.exists("simResults/mainResults.RData")){
+if(file.exists("simResults/mainResults.RData")&!fromScratch){
     load("simResults/mainResults.RData")
 } else{
     results=loadRes()
     save(results,file='simResults/mainResults.RData')
 }
 
-if(file.exists("simResults/nsResults.RData")){
+if(file.exists("simResults/nsResults.RData")&!fromScratch){
     load("simResults/nsResults.RData")
 } else{
     resultsNs=loadRes(ext2='ns')
     save(resultsNs,file='simResults/nsResults.RData')
 }
 
-if(file.exists("simResults/b1sResults.RData")){
+if(file.exists("simResults/b1sResults.RData")&!fromScratch){
     load("simResults/b1sResults.RData")
 } else{
     resultsB1s=loadRes(ext2='b1s')
