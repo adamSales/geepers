@@ -1,5 +1,10 @@
 library(sandwich)
 
+DBN <- #"none"
+## "n1"
+"n"
+
+
 ### I want a bunch of attributes for the VCV matrix, but I don't
 ### want them to print every time!
 print.vcv <- function(x,...) print(x[1:NROW(x),1:NCOL(x)],...)
@@ -132,18 +137,22 @@ sandwichMats <- function(psMod,outMod,data,clust=NULL,int=any(grepl(":x",names(c
     efOut <- estfun(outMod) ## psi2
 
     out <- list(
-        a11inv = bread(psMod)/nobs(psMod),
-        a22inv = bread(outMod)/nobs(outMod),
-        a21 = A21(psMod,outMod,data),#/nrow(data),
-        b11=(if(is.null(clust)) meatHC(psMod) else meatCL(psMod,cluster=data[rownames(model.frame(psMod)),"clust"]))*nobs(psMod),
-        b22 = (if(is.null(clust)) meatHC(outMod) else meatCL(outMod,cluster=data$clust))*nobs(outMod)
+        a11inv = bread(psMod)/(if(DBN=="none") nobs(psMod) else 1),
+        a22inv = bread(outMod)/(if(DBN=="none") nobs(outMod) else 1),
+        a21 = A21(psMod,outMod,data)/(if(DBN=="none") 1 else if(DBN=="n") nrow(data) else nobs(psMod)),
+        b11=(if(is.null(clust)) meat(psMod) else meatCL(psMod,cluster=data[rownames(model.frame(psMod)),"clust"]))*
+            (if(DBN=="none") nobs(psMod) else 1),
+        b22 = (if(is.null(clust)) meat(outMod) else meatCL(outMod,cluster=data$clust))*
+            (if(DBN=="none") nobs(outMod) else 1)
     )
     out <- within( out,b12 <-
         if(int){
             matrix(0,nrow(b11),ncol(b22))
-        } else if(is.null(clust)) crossprod(efPS,efOut)#/nrow(data)
+        } else if(is.null(clust)) crossprod(efPS,efOut)/
+                                  (if(DBN=="none") 1 else if(DBN=="n") nrow(data) else nobs(psMod))
         else crossprod(apply(efPS,2L,rowsum,data$clust),
-                       apply(efOut,2L,rowsum,data$clust))#/sum(data$Z==0)
+                       apply(efOut,2L,rowsum,data$clust))/
+             (if(DBN=="none") 1 else if(DBN=="n") nrow(data) else nobs(psMod))
         )
     out
 }
@@ -176,7 +185,7 @@ vcvPS <- function(psMod,outMod,data,clust=NULL,int=any(grepl(":x",names(coef(out
 
     n <- nrow(model.frame(outMod))
 
-    vcvFull <- solve(A)%*%B%*%t(solve(A))#/nrow(data)
+    vcvFull <- solve(A)%*%B%*%t(solve(A))/(if(DBN=="none") 1 else nrow(data))
     main <- a22inv%*%b22%*%t(a22inv)
     vcv <- vcvFull[-(1:nrow(b11)),-(1:nrow(b11))]
     dimnames(vcv) <- dimnames(main)
@@ -287,7 +296,7 @@ A21 <- function(psMod,outMod,data){
 
   DD <- W0*q
 
-  AA%*%DD#/nrow(X0)
+  -AA%*%DD#/nrow(X0)
 }
 
 
