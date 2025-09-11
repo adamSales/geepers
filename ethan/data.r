@@ -16,14 +16,15 @@ datraw <- inner_join(as,raw)
 with(datraw,table(condition,problem_condition))
 with(datraw,table(condition,problem_condition,experiment_id))
 with(datraw,table(condition,scaffold_problems_available))
-with(datraw,table(condition,scaffold_problems_given))
+with(datraw,table(condition,scaffold_problems_given,experiment_id))
 
 rawStud <- datraw%>%
   #filter(problem_condition!="Unknown")%>%
-  group_by(experiment_id,student_id)%>%
+  group_by(experiment_id,student_id,condition)%>%
   summarize(
       across(
           c(
+              answer_before_tutoring,
               starts_with("scaff"),
               starts_with("hint"),
               starts_with("explanation"),

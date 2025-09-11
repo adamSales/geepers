@@ -1,7 +1,7 @@
 source("code/regression.r")
 library(rstan)
 
-psMod0 <- glm(S2~experiment_id+
+psMod0 <- glm(S~experiment_id+
                 #no_student_prior_skill_builders+
                 #no_student_prior_problem_sets+no_student_prior_attempted_problems+
                 #no_student_prior_completed_problems+
@@ -69,6 +69,20 @@ fwlPlots <- function(mod){
     facet_wrap(~regressor,scales="free_x")
 }
 
+### bootstrap geepers?
+bs <- replicate(
+    1000,
+    effsFromFit(
+        ps0 <- est(
+            data = dat[sample(seq_len(nrow(dat)),nrow(dat),replace=TRUE),],
+            covFormU = formula(psMod0)[-2],
+            trt = "condition",
+            out = "normalized_student_learning",
+            use = "S2")
+    )[,1]
+)
+apply(bs,1,sd)
+
 
 fwlPlots(ps0$outMod)
 
@@ -78,7 +92,7 @@ effsFromFit(
     covFormU = formula(psModStep)[-2],
     trt = "condition",
     out = "normalized_student_learning",
-    use = "S2")
+    use = "S")
 )
 
 arm::binnedplot(predict(ps1$psMod,type="response"),
@@ -165,3 +179,20 @@ iv2 <- ivreg(
     data = dat)
 
 coeftest(iv2,vcovHC)
+
+
+
+
+datR <- dat
+PS <- predict(psModStep,dat,type="response")
+datR$Sp <- ifelse(datR$condition==1,datR$S2,PS)
+outMod <- lm(update(formula(psModStep),normalized_student_learning~condition*Sp+.),data=datR)
+
+outModInt <- update(outMod,.~.+condition*.)
+
+outModStep <- step(outMod,scope=list(lower=formula(outMod),upper=formula(outModInt)))
+
+
+bs <- replicate(1000,
+{
+    update(
