@@ -181,8 +181,8 @@ pd <- results %>%
   ungroup()%>%
   mutate(
     errP = est - pop,
-    B1 = factor(b1,levels=c(0,0.2,0.5),
-                labels=c(bquote(alpha==0),bquote(alpha==0.2),bquote(alpha==0.5))),
+    B1 = factor(b1,levels=c(0,0.3,0.5),
+                labels=c(bquote(alpha==0),bquote(alpha==0.3),bquote(alpha==0.5))),
     AUCff=paste0('AUC=',round(AUCf,1)),
     N=paste0('n=',n),
     M1=factor(mu01,levels=c("0","0.3"),
@@ -196,8 +196,8 @@ pd <- results %>%
     interactionS=ifelse(intS,"S\ninteraction","No S\ninteraction"),
     intAll=ifelse(intZ,ifelse(intS,"$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$","$\\bm{x}\\text{:}Z$"),ifelse(intS,"$\\bm{x}\\text{:}S_T$","No inter.")),
     intAll=factor(intAll,levels=c("No inter.","$\\bm{x}\\text{:}Z$", "$\\bm{x}\\text{:}S_T$","$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$"))
-  ) %>%
-  filter(estimator=='PSW'|rhat<1.1)
+  ) #%>%
+  #filter(estimator=='PSW'|rhat<1.1)
 
 ### figure for paper
 
@@ -231,12 +231,28 @@ unif<-bp(pd,
                                         #plot.subtitle = element_text(size=10),
         legend.position="none")+
   scale_fill_manual(values=c('#1b9e77','#d95f02','#7570b3'))+
+    scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3'))
+
+
+lognorm<-bp(pd,
+   subset=b1 > 0& errDist=='lognorm'& eff==1&mu01==0&n==500&PE=='Stratum 1',
+   title="Lognormal Residuals",ylim=c(-1.5,1.5),#c(-1.5,1.5),
+   facet=B1~intAll,#interactionZ+interactionS,
+   Labeller=labeller(B1=label_parsed,intAll=label_value),labSize=2.
+   )+
+    labs(y=NULL,#bquote("Estimation Error for "~tau^1),#subtitle="No Interactions",
+         x=NULL)+
+  #theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+                                        #plot.subtitle = element_text(size=10),
+        legend.position="none")+
+  scale_fill_manual(values=c('#1b9e77','#d95f02','#7570b3'))+
   scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3'))
 
 #pdf(
 tikz("simFigs/boxplotsNew.tex",#pdf",
      width=6.5,height=4,standAlone=TRUE)
-grid.arrange(norm,unif,nrow=1)
+grid.arrange(norm,unif,lognorm,nrow=1)
 dev.off()
 
 setwd("simFigs")
@@ -254,9 +270,10 @@ rmse <- pd%>%
 
 
 
-sink('writeUps/rmseTabAppendix500.tex')
+sink('results/rmseTabAppendix500.tex')
+
 cbind(
-rmse%>%filter(errDist!='mix',n==500,eff!="Diff",b1==.2,mu01==0)%>%
+rmse%>%filter(errDist!='mix',n==500,eff!="Diff",b1==.3,mu01==0)%>%
   transmute(`Residual\nDist.`=c(norm='Normal',unif='Uniform')[errDist],
          `$\\bm{x}:Z$\nInt.?`=ifelse(intZ,'Yes','No'),
          `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
@@ -279,13 +296,14 @@ select(xx,estimator,rmse)%>%
 pivot_wider(names_from=estimator,values_from=rmse)%>%
 select(-xx))%>%#GEEPERs,Mix.,PSW))%>%
     kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
-    add_header_above(c(" " = 5,  "$\\\\alpha=0.2$" = 3, "$\\\\alpha=0.5$" = 3),escape=FALSE)%>%
+    add_header_above(c(" " = 5,  "$\\\\alpha=0.3$" = 3, "$\\\\alpha=0.5$" = 3),escape=FALSE)%>%
      add_header_above(c(" " = 5,  "$n=500$"=6),escape=FALSE)%>%
   collapse_rows(columns=1,latex_hline="major",valign="middle")
+
 sink()
 
 
-sink('writeUps/rmseTabAppendix1000.tex')
+sink('results/rmseTabAppendix1000.tex')
 cbind(
 rmse%>%filter(errDist!='mix',n==1000,eff!="Diff",b1==.2)%>%
   transmute(`Residual\nDist.`=c(norm='Normal',unif='Uniform')[errDist],
@@ -310,7 +328,7 @@ select(xx,estimator,rmse)%>%
 pivot_wider(names_from=estimator,values_from=rmse)%>%
 select(-xx))%>%#GEEPERs,Mix.,PSW))%>%
     kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
-  add_header_above(c(" " = 5,  "$\\\\alpha=0.2$" = 3, "$\\\\alpha=0.5$" = 3),escape=FALSE)%>%
+  add_header_above(c(" " = 5,  "$\\\\alpha=0.3$" = 3, "$\\\\alpha=0.5$" = 3),escape=FALSE)%>%
 add_header_above(c(" " = 5,  "$n=1000$"=6),escape=FALSE)%>%
     collapse_rows(columns=1,latex_hline="major",valign="middle")
 sink()
@@ -332,7 +350,8 @@ condRed <- function(coverage,intZ,intS,estimator,errDist,b1=1)
     ifelse(estimator=="\\textsc{geepers}"&b1==0,redCov(coverage),sprintf("%.2f",coverage))))
 
 
-sink('writeUps/coverageTab.tex')
+sink('results/coverageTab.tex')
+
 cbind(
      coverage%>%
       mutate(coverage=condRed(coverage,intZ,intS,estimator,errDist,b1))%>%
@@ -342,8 +361,9 @@ cbind(
          `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
          estimator,#=c(Mixture="\\pmm",GEEPERs="\\geepers")[estimator],
          coverage)%>%
-    pivot_wider(names_from=estimator,values_from=coverage),
-   coverage%>%filter(n==500,eff==1,errDist!='mix',mu01==0,b1==.2)%>%
+     pivot_wider(names_from=estimator,values_from=coverage)
+   ,
+   coverage%>%filter(n==500,eff==1,errDist!='mix',mu01==0,b1==.3)%>%
       mutate(coverage=condRed(coverage,intZ,intS,estimator,errDist))%>%
     pivot_wider(names_from=estimator,values_from=coverage)%>%
     select(`\\textsc{geepers}`,`\\textsc{pmm}`),
@@ -352,10 +372,13 @@ cbind(
     pivot_wider(names_from=estimator,values_from=coverage)%>%
     select(`\\textsc{geepers}`,`\\textsc{pmm}`)#%>%
 #    rename("\\pmm"="Mixture","\\geepers"="GEEPERs")
-  )%>%
+)
+
+
+%>%
     kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
     add_header_above(c(" " = 3, "$\\\\alpha=0$" = 2,
-                       "$\\\\alpha=0.2$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
+                       "$\\\\alpha=0.3$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
     collapse_rows(columns=1,latex_hline="major",valign="middle")%>%
     footnote(general=c("\\\\footnotesize Based on 500 replications. $n=500$. Simulation standard error $\\\\approx 1$ percentage point. Estimates colored \\\\rd{red} indicate cases where the assumptions of the model are not met."),escape=FALSE,footnote_as_chunk = TRUE,threeparttable=TRUE)%>%print()
 sink()
@@ -364,7 +387,7 @@ sink()
 ## coverage tab for appendix: n=500
 ########################
 
-sink('writeUps/coverageTabAppendix500.tex')
+sink('results/coverageTabAppendix500.tex')
 cbind(
     coverage%>%filter(errDist!='mix',eff!="Diff",b1==0,estimator!='\\textsc{psw}',n==500
                       )%>%
@@ -377,7 +400,7 @@ cbind(
          coverage=sprintf("%.2f", coverage),#round(coverage,2),
          coverage=ifelse(intZ|intS|(errDist=="unif"&estimator=="\\textsc{pmm}"),paste0("\\rd{",coverage,"}"),coverage))%>%
 pivot_wider(names_from=estimator,values_from=coverage),
-coverage%>%filter(errDist!='mix',eff!="Diff",b1==.2,estimator!='PSW',n==500)%>%
+coverage%>%filter(errDist!='mix',eff!="Diff",b1==.3,estimator!='PSW',n==500)%>%
   transmute(`Residual\nDist.`=c(norm='Normal',unif='Uniform')[errDist],
          `$\\bm{x}:Z$\nInt.?`=ifelse(intZ,'Yes','No'),
          `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
@@ -401,7 +424,7 @@ coverage%>%filter(errDist!='mix',n==500,eff!="Diff",b1==.5,estimator!='\\textsc{
 pivot_wider(names_from=estimator,values_from=coverage)%>%
 select(`\\textsc{geepers}`,`\\textsc{pmm}`))%>%
 kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
-    add_header_above(c(" " = 5, "$\\\\alpha=0$" = 2, "$\\\\alpha=0.2$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
+    add_header_above(c(" " = 5, "$\\\\alpha=0$" = 2, "$\\\\alpha=0.3$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
     add_header_above(c(" " = 5, "$n=500$"=6),escape=FALSE)%>%
   collapse_rows(columns=1,latex_hline="major",valign="middle")
 sink()
@@ -409,7 +432,7 @@ sink()
 ########################
 ## coverage tab for appendix: n=1000
 ########################
-sink('writeUps/coverageTabAppendix1000.tex')
+sink('results/coverageTabAppendix1000.tex')
 cbind(
     coverage%>%filter(errDist!='mix',eff!="Diff",b1==0,estimator!='\\textsc{psw}',n==1000
                       )%>%
@@ -446,7 +469,7 @@ coverage%>%filter(errDist!='mix',n==1000,eff!="Diff",b1==.5,estimator!='\\textsc
 pivot_wider(names_from=estimator,values_from=coverage)%>%
 select(`\\textsc{geepers}`,`\\textsc{pmm}`))%>%
 kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
-    add_header_above(c(" " = 5, "$\\\\alpha=0$" = 2, "$\\\\alpha=0.2$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
+    add_header_above(c(" " = 5, "$\\\\alpha=0$" = 2, "$\\\\alpha=0.3$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
     add_header_above(c(" " = 5, "$n=1000$"=6),escape=FALSE)%>%
   collapse_rows(columns=1,latex_hline="major",valign="middle")
 sink()
