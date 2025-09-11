@@ -39,18 +39,14 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE){
     x1 <- rnorm(2*n)
     x2 <- rnorm(2*n)
     x3 <- if(errDist=='norm'){
-              rnorm(2*n)
-          } else if(errDist=="lognorm"){
-              exp(rnorm(2*n,0,sqrt(log((1+sqrt(3))/2))))
-          }
-          else{
-              runif(2*n,-sqrt(12)/2,sqrt(12)/2)
-          }
-
+        rnorm(2*n)
+     } else if(errDist=="lognorm") {
+        exp(rnorm(2*n,0,sqrt(log((1+sqrt(5))/2))))
+      } else runif(2*n,-sqrt(12)/2,sqrt(12)/2)
 
     x1 <- x1-mean(x1)
     x2 <- x2-mean(x2)
-    x3 <- (x3-mean(x3))/sd(x3)
+    x3 <- x3-mean(x3)
 
     psTrue <- plogis(b1*(x1+x3)-b1*x2)
 
