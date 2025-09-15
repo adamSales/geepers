@@ -22,7 +22,7 @@ bayes <- function(data,...){
 
 
 ### mu00=0
-makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE){
+makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE,oppSignsPS=TRUE){
 
     if(debug){
       print("debugging--parameter values set to defaults")
@@ -46,9 +46,9 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE){
 
     x1 <- x1-mean(x1)
     x2 <- x2-mean(x2)
-    x3 <- x3-mean(x3)
+    x3 <- (x3-mean(x3))/sd(x3)
 
-    psTrue <- plogis(b1*(x1+x3)-b1*x2)
+    psTrue <- if(oppSignsPS) plogis(b1*(x1+x3)-b1*x2) else plogis(b1*(x1+x3+x2))
 
     S <- rbinom(2*n,1,psTrue)
 
@@ -104,7 +104,25 @@ simOneBayes <- function(dat){
 }
 
 
-oneCase <- function(nsim,ext,ncores,cl=NULL, facs){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
+simOne <- function(dat,estimators=list(mest=effs,bayes=bayes,psw=psw)){
+
+    out <- lapply(estimators, \(fun) fun(dat))
+    out$true <- attr(dat,'trueEffs')
+    out$facs <- attr(dat,"facs")
+
+    out
+}
+  ##   list(
+
+##         mest=mest,
+##         psw=PSW,
+##         bayes=BAYES,
+##         facs=attr(dat,'facs')
+##     )
+## }
+
+
+oneCase <- function(nsim,ext,ncores,cl=NULL, facs,estimators){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
 
 #    print(Sys.time())
 
@@ -118,6 +136,7 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs){ #n,mu00,mu01,mu10,mu11,gumb,
 
     if(!is.null(cl)){
         clusterExport(cl,"datasets",envir=environment())
+        clusterExport(cl,"estimators",envir=environment())
 
         pb <- txtProgressBar(max = nsim, style = 3)
         progress_fun <- function(nn) setTxtProgressBar(pb, nn)
@@ -129,14 +148,14 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs){ #n,mu00,mu01,mu10,mu11,gumb,
         if(is.null(cl)){
 	    	mclapply(
 		    	datasets,
-                	function(dat) try(simOneBayes(dat)),
+                	function(dat) try(simOne(dat,estimators=estimators)),
                 	mc.cores=ncores
             		)
 	     } else{
 	     	    foreach(i = 1:nsim,
                     .packages=c("sandwich","dplyr","rstan"),
                     .options.snow = opts) %dopar% {
-                        try(simOneBayes(datasets[[i]]))
+                        try(simOne(datasets[[i]],estimators=estimators))
                     }
          }
 #                  parLapply(cl,datasets, function(dat) try(simOneBayes(dat)))
@@ -155,13 +174,14 @@ fullsim <- function(nsim,
                     mu11=.3,#effs=c(TRUE,FALSE),
                     errDist=c('norm','lognorm','unif'),
                     b1s=c(0,0.3,0.5),
+                    oppSignsPS=TRUE,
                     ext='',
                     intS=c(TRUE,FALSE),
                     intZ=c(TRUE,FALSE),
-                    se=TRUE,
                     ncores=8,
-		    cl=NULL,
-		    start=1
+                    cl=NULL,
+                    start=1,
+                    estimators=list(mest=effs,bayes=bayes,psw=psw)
                     ){
 
     cases=expand.grid(
@@ -169,6 +189,7 @@ fullsim <- function(nsim,
 		mu01=mu01,
 		mu10=mu10,
 		mu11=mu11,
+    oppSignsPS=oppSignsPS,
 		errDist=errDist,
                 b1=b1s,
                 intS=intS,
@@ -183,7 +204,7 @@ fullsim <- function(nsim,
     	  cat(round(i/nrow(cases)*100),'%\n')
 	  facs <- cases[i,]
     	  res <- oneCase(nsim=nsim,ext=paste0(i,ext),
-                         ncores=ncores,cl=cl,facs=facs)
+                         ncores=ncores,cl=cl,facs=facs,estimators=estimators)
 	  save(res,facs,file=paste0('simResults/sim',i,ext,'.RData'))
     }
 

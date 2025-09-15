@@ -1,5 +1,13 @@
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(tidyr)
+library(kableExtra)
+library(rstan)
+library(tikzDevice)
 
 
+source("code/regression.r")
 
 print(load('data/OPT_Study_PersonLevel_Data.RData'))
 ## downloaded from https://www.causeweb.org/tshs/obstetrics-and-periodontal-therapy/
