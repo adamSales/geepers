@@ -19,6 +19,29 @@ bayes <- function(data,...){
     summary(fit, par=c('eff0','eff1','effDiff'))$summary
 }
 
+pstrata <- function(data,...){
+
+    psobj <- PSObject(
+        S.formula=Z+S~x1+x2,
+        Y.formula=Y~x1+x2,
+        Y.family=gaussian(link="identity"),
+        data=data,
+        strata = c(nt = "00", co = "01"),
+        ER=c(nt=FALSE,co=FALSE)
+    )
+    standata <- make_standata(psobj)
+    output <-
+        capture.output(
+            stansamp <- post_samples <- PSSample(
+                    "code/pstrata.stan",
+                    data = standata))
+    ps1 <-    list(
+        PSobject = psobj,
+        post_samples = post_samples
+    )
+    class(ps1) <- "PStrata"
+    ps1%>%PSOutcome()%>%PSContrast(Z=TRUE)%>%summary("matrix")
+}
 
 
 ### mu00=0

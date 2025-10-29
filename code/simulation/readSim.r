@@ -30,6 +30,14 @@ if(file.exists("simResults/b1sResults.RData")&!fromScratch){
     save(resultsB1s,file='simResults/b1sResults.RData')
 }
 
+if(file.exists("simResults/lognormalResults.RData")&!fromScratch){
+    load("simResults/lognormalResults.RData")
+} else{
+    resultsLognorm=loadRes(ext2='lognorm')
+    save(resultsLognorm,file='simResults/lognormalResults.RData')
+}
+
+
 #resultsN100=loadRes(ext2='n100_mu01is0')
 #save(resultsN100,file='simResults/resultsN100.RData')
 
