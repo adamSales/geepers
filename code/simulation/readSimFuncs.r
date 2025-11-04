@@ -43,6 +43,20 @@ psw1Proc=function(psw){
 }
 
 
+proc1pstrata <- function(res1){
+    if("pstrata"%in%names(res1))
+        return(
+            tibble(
+                eff=c(0,1),
+                estimator="pstrata",
+                est=res1$pstrata[,"mean"],
+                se=res1$pstrata[,"sd"],
+                CIpercL=res1$pstrata[,"2.5%"],
+                CIpercU=res1$pstrata[,"97.5%"]
+            )
+        ) else return(NULL)
+}
+
 proc1mest <- function(res1){
   tibble(
     eff = c(0,1),
@@ -80,7 +94,8 @@ proc1 <- function(res1){
   res <- bind_rows(
     proc1mest(res1),
     proc1bayes(res1),
-    proc1psw(res1)
+    proc1psw(res1),
+    proc1pstrata(res1)
   )
   res$pop = vapply(res$eff, muEff, facs=res1$facs, numeric(1))
   res$samp <- unname(res1$true[paste0("S",res$eff)])
@@ -95,7 +110,7 @@ proc <- function(res){
     res[[1]]$facs,
     map_dfr(res,proc1)%>%
       mutate(
-        CInormL = est - 2 * se, 
+        CInormL = est - 2 * se,
         CInormU = est + 2 * se,
         CIpercL = ifelse(is.na(CIpercL), CInormL, CIpercL),
         CIpercU = ifelse(is.na(CIpercU), CInormU, CIpercU)
@@ -150,35 +165,15 @@ bp <- function(pd,subset,facet,title=deparse(substitute(subset)),
     geom_jitter(alpha = 0.1) +
     geom_violin(#position = "dodge2",
       color = 'black',
-      #outlier.shape = NA
-      draw_quantiles = 0.5) +
+      quantile.linetype="solid",
+      quantiles = 0.5) +
     geom_hline(yintercept = 0) +
     coord_cartesian(ylim =ylim)+
-    facet_grid(facet , #scales = "free",
+    facet_nested(facet , #scales = "free",
                labeller = Labeller)+
-    ggtitle(title)+
-                                        #labs(title = title,
-     #    x = NULL, y = 'Estimation Error') +
-    theme(legend.pos = 'none')
+    theme(legend.position = 'none')
 
-  ## if(any(pd$errP<ylim[1]|pd$errP>ylim[2])){
-  ##   outliers=TRUE
-  ##   grp=c(as.character(unlist(as.list(facet)[-1])),'estimator')
-  ##   outDat=pd%>%
-  ##     group_by(across(!!grp))%>%
-  ##     summarize(
-  ##       nBig=sum(errP>ylim[2]),
-  ##       nSmall=sum(errP<ylim[1]))%>%
-  ##     pivot_longer(c(nBig,nSmall),names_to="bs",values_to="out")%>%
-  ##     mutate(
-  ##       y=ifelse(bs=='nBig',ylim[2],ylim[1]),
-  ##       lab=ifelse(out>0,paste0('+',out),''))%>%
-  ##     ungroup()
-  ## } else outliers=FALSE
-
-  ## if(outliers) p=p+geom_label(data=filter(outDat,out>0),
-  ##                             inherit.aes=FALSE,
-  ##                             mapping=aes(estimator,y,label=lab),size=labSize,label.padding=unit(0.1, "lines"))
+    if(!is.null(title)) p <- p+ggtitle(title)
 
   if(!is.null(ylim))
     p=p+stat_summary(aes(estimator,errP),geom='label', fun.data=function(xx) data.frame(y=if(sum(xx<ylim[1])>0) ylim[1] else ylim[1]-100,label=paste('+',sum(xx <ylim[1]))),inherit.aes=FALSE,size=labSize)+

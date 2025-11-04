@@ -1,4 +1,5 @@
 library(tidyverse)
+library(ggh4x)
 library(broom)
 library(kableExtra)
 library(gridExtra)
@@ -176,20 +177,23 @@ ggsave("simFigs/biasSEbyB1n.jpg",width=5,height=4)
 ### main results
 
 pd <- results %>%
+    filter(estimator%in%c("bayes","mest","psw"))%>%
   group_by(b1)%>%
   mutate(AUCf=mean(auc,na.rm=TRUE))%>%
   ungroup()%>%
   mutate(
     errP = est - pop,
     B1 = factor(b1,levels=c(0,0.3,0.5),
-                labels=c(bquote(alpha==0),bquote(alpha==0.3),bquote(alpha==0.5))),
+                labels=paste0("$\\alpha=",c(0,0.3,0.5),"$")),
+#                    c(bquote(alpha==0),bquote(alpha==0.3),bquote(alpha==0.5))),
     AUCff=paste0('AUC=',round(AUCf,1)),
     N=paste0('n=',n),
     M1=factor(mu01,levels=c("0","0.3"),
               ##labels=c(bquote(mu[c]^1-mu[c]^0==0),bquote(mu[c]^1-mu[c]^0==0.3))),
               labels=c(bquote(mu[c]^1==0),bquote(mu[c]^1==0.3))),
     PE=paste('Stratum',eff),
-    dist=paste(c(mix='Mixture',unif='Unform',norm='Normal')[errDist],'Errors'),
+    dist=factor(paste(c(unif='Unform',norm='Normal',lognorm="Lognormal")[errDist],'Errors'),
+                levels=paste(c("Normal","Lognormal","Unform"),'Errors')),
     #estimator=c(bayes='Mixture',mest='GEEPERs',psw='PSW')[estimator],
     estimator=c(bayes='\\textsc{pmm}',mest='\\textsc{geepers}',psw='\\textsc{psw}')[estimator],
     interactionZ=ifelse(intZ,"Z\ninteraction","No Z\ninteraction"),
@@ -199,60 +203,55 @@ pd <- results %>%
   ) #%>%
   #filter(estimator=='PSW'|rhat<1.1)
 
-### figure for paper
 
-norm<-bp(pd,
-   subset=b1 > 0& errDist=='norm'& eff==1&mu01==0&n==500&PE=='Stratum 1',
-   title="Normal Residuals",ylim=c(-1.5,1.5),#c(-1.5,1.5),
-   facet=B1~intAll,#interactionZ+interactionS,
+## pdlognorm <- resultsLognorm %>%
+##   group_by(b1)%>%
+##   mutate(AUCf=mean(auc,na.rm=TRUE))%>%
+##   ungroup()%>%
+##   mutate(
+##     errP = est - pop,
+##     B1 = factor(b1,levels=c(0,0.3,0.5),
+##                 labels=c(bquote(alpha==0),bquote(alpha==0.3),bquote(alpha==0.5))),
+##     AUCff=paste0('AUC=',round(AUCf,1)),
+##     N=paste0('n=',n),
+##     M1=factor(mu01,levels=c("0","0.3"),
+##               ##labels=c(bquote(mu[c]^1-mu[c]^0==0),bquote(mu[c]^1-mu[c]^0==0.3))),
+##               labels=c(bquote(mu[c]^1==0),bquote(mu[c]^1==0.3))),
+##     PE=paste('Stratum',eff),
+##     dist=paste(c(mix='Mixture',unif='Unform',norm='Normal')[errDist],'Errors'),
+##     #estimator=c(bayes='Mixture',mest='GEEPERs',psw='PSW')[estimator],
+##     estimator=c(bayes='\\textsc{pmm}',mest='\\textsc{geepers}',psw='\\textsc{psw}')[estimator],
+##     interactionZ=ifelse(intZ,"Z\ninteraction","No Z\ninteraction"),
+##     interactionS=ifelse(intS,"S\ninteraction","No S\ninteraction"),
+##     intAll=ifelse(intZ,ifelse(intS,"$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$","$\\bm{x}\\text{:}Z$"),ifelse(intS,"$\\bm{x}\\text{:}S_T$","No inter.")),
+##     intAll=factor(intAll,levels=c("No inter.","$\\bm{x}\\text{:}Z$", "$\\bm{x}\\text{:}S_T$","$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$"))
+##   ) #%>%
+##   #filter(estimator=='PSW'|rhat<1.1)
+
+### figure for paper
+violin <- bp(pd,
+   subset=b1 > 0&  eff==1&mu01==0&n==500&PE=='Stratum 1',
+   title=NULL,#"Normal Residuals",
+   ylim=c(-1.5,1.5),#c(-1.5,1.5),
+   facet=B1~dist+intAll,#interactionZ+interactionS,
    Labeller=labeller(B1="none",#label_parsed,
                      intAll=label_value),labSize=2.5
    )+
     labs(y=bquote("Estimation Error for "~tau^1),#subtitle="No Interactions",
          x=NULL)+
   #theme_bw()+
-    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
-          strip.text.y=element_blank(),strip.background.y=element_blank(),
-                                        #plot.subtitle = element_text(size=10),
-        legend.position="none")+
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
+          #strip.text.y=element_blank(),strip.background.y=element_blank())+
+                                        #plot.subtitle = element_text(size=10),)+
   scale_fill_manual(values=c('#1b9e77','#d95f02','#7570b3'))+
   scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3'))
 
-unif<-bp(pd,
-   subset=b1 > 0& errDist=='unif'& eff==1&mu01==0&n==500&PE=='Stratum 1',
-   title="Uniform Residuals",ylim=c(-1.5,1.5),#c(-1.5,1.5),
-   facet=B1~intAll,#interactionZ+interactionS,
-   Labeller=labeller(B1=label_parsed,intAll=label_value),labSize=2.
-   )+
-    labs(y=NULL,#bquote("Estimation Error for "~tau^1),#subtitle="No Interactions",
-         x=NULL)+
-  #theme_bw()+
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
-                                        #plot.subtitle = element_text(size=10),
-        legend.position="none")+
-  scale_fill_manual(values=c('#1b9e77','#d95f02','#7570b3'))+
-    scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3'))
-
-
-lognorm<-bp(pd,
-   subset=b1 > 0& errDist=='lognorm'& eff==1&mu01==0&n==500&PE=='Stratum 1',
-   title="Lognormal Residuals",ylim=c(-1.5,1.5),#c(-1.5,1.5),
-   facet=B1~intAll,#interactionZ+interactionS,
-   Labeller=labeller(B1=label_parsed,intAll=label_value),labSize=2.
-   )+
-    labs(y=NULL,#bquote("Estimation Error for "~tau^1),#subtitle="No Interactions",
-         x=NULL)+
-  #theme_bw()+
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
-                                        #plot.subtitle = element_text(size=10),
-        legend.position="none")+
-  scale_fill_manual(values=c('#1b9e77','#d95f02','#7570b3'))+
-  scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3'))
 
 #pdf(
 tikz("simFigs/boxplotsNew.tex",#pdf",
-     width=6.5,height=4,standAlone=TRUE)
-grid.arrange(norm,unif,lognorm,nrow=1)
+     width=7,height=4,standAlone=TRUE)
+print(violin)
+                                        #grid.arrange(norm,unif,lognorm,nrow=1)
 dev.off()
 
 setwd("simFigs")
@@ -343,6 +342,12 @@ sink()
   group_by(n,mu01,errDist,b1,interactionS,interactionZ,intS,intZ,eff,estimator)%>%
    summarize(coverage=mean(CInormL<=pop & CInormU>=pop,na.rm=TRUE))%>%ungroup()
 
+coverageLognorm <- pdlognorm%>%
+  filter(rhat<1.1)%>%
+  group_by(n,mu01,errDist,b1,interactionS,interactionZ,intS,intZ,eff,estimator)%>%
+   summarize(coverage=mean(CInormL<=pop & CInormU>=pop,na.rm=TRUE))%>%ungroup()
+
+
 redCov <- function(coverage) paste0("\\rd{",sprintf("%.2f",coverage),"}")
 condRed <- function(coverage,intZ,intS,estimator,errDist,b1=1)
     ifelse(intZ|intS,redCov(coverage),
@@ -372,10 +377,7 @@ cbind(
     pivot_wider(names_from=estimator,values_from=coverage)%>%
     select(`\\textsc{geepers}`,`\\textsc{pmm}`)#%>%
 #    rename("\\pmm"="Mixture","\\geepers"="GEEPERs")
-)
-
-
-%>%
+)%>%
     kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
     add_header_above(c(" " = 3, "$\\\\alpha=0$" = 2,
                        "$\\\\alpha=0.3$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
