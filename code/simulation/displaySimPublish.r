@@ -5,7 +5,7 @@ library(kableExtra)
 library(gridExtra)
 library(ggpubr)
 library(tikzDevice)
-
+select <- dplyr::select
 
 options(
 tikzLatexPackages = c(
@@ -182,7 +182,7 @@ pd <- results %>%
   mutate(AUCf=mean(auc,na.rm=TRUE))%>%
   ungroup()%>%
   mutate(
-    errP = est - pop,
+    errP = est - samp,
     B1 = factor(b1,levels=c(0,0.3,0.5),
                 labels=paste0("$\\alpha=",c(0,0.3,0.5),"$")),
 #                    c(bquote(alpha==0),bquote(alpha==0.3),bquote(alpha==0.5))),
@@ -198,35 +198,11 @@ pd <- results %>%
     estimator=c(bayes='\\textsc{pmm}',mest='\\textsc{geepers}',psw='\\textsc{psw}')[estimator],
     interactionZ=ifelse(intZ,"Z\ninteraction","No Z\ninteraction"),
     interactionS=ifelse(intS,"S\ninteraction","No S\ninteraction"),
-    intAll=ifelse(intZ,ifelse(intS,"$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$","$\\bm{x}\\text{:}Z$"),ifelse(intS,"$\\bm{x}\\text{:}S_T$","No inter.")),
-    intAll=factor(intAll,levels=c("No inter.","$\\bm{x}\\text{:}Z$", "$\\bm{x}\\text{:}S_T$","$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$"))
+    intAll=ifelse(intZ,ifelse(intS,"$\\bm{x}\\text{:}S_T$\\&\n$\\bm{x}\\text{:}Z$","$\\bm{x}\\text{:}Z$"),ifelse(intS,"$\\bm{x}\\text{:}S_T$","No\ninter.")),
+    intAll=factor(intAll,levels=c("No\ninter.","$\\bm{x}\\text{:}Z$", "$\\bm{x}\\text{:}S_T$","$\\bm{x}\\text{:}S_T$\\&\n$\\bm{x}\\text{:}Z$"))
   ) #%>%
   #filter(estimator=='PSW'|rhat<1.1)
 
-
-## pdlognorm <- resultsLognorm %>%
-##   group_by(b1)%>%
-##   mutate(AUCf=mean(auc,na.rm=TRUE))%>%
-##   ungroup()%>%
-##   mutate(
-##     errP = est - pop,
-##     B1 = factor(b1,levels=c(0,0.3,0.5),
-##                 labels=c(bquote(alpha==0),bquote(alpha==0.3),bquote(alpha==0.5))),
-##     AUCff=paste0('AUC=',round(AUCf,1)),
-##     N=paste0('n=',n),
-##     M1=factor(mu01,levels=c("0","0.3"),
-##               ##labels=c(bquote(mu[c]^1-mu[c]^0==0),bquote(mu[c]^1-mu[c]^0==0.3))),
-##               labels=c(bquote(mu[c]^1==0),bquote(mu[c]^1==0.3))),
-##     PE=paste('Stratum',eff),
-##     dist=paste(c(mix='Mixture',unif='Unform',norm='Normal')[errDist],'Errors'),
-##     #estimator=c(bayes='Mixture',mest='GEEPERs',psw='PSW')[estimator],
-##     estimator=c(bayes='\\textsc{pmm}',mest='\\textsc{geepers}',psw='\\textsc{psw}')[estimator],
-##     interactionZ=ifelse(intZ,"Z\ninteraction","No Z\ninteraction"),
-##     interactionS=ifelse(intS,"S\ninteraction","No S\ninteraction"),
-##     intAll=ifelse(intZ,ifelse(intS,"$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$","$\\bm{x}\\text{:}Z$"),ifelse(intS,"$\\bm{x}\\text{:}S_T$","No inter.")),
-##     intAll=factor(intAll,levels=c("No inter.","$\\bm{x}\\text{:}Z$", "$\\bm{x}\\text{:}S_T$","$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$"))
-##   ) #%>%
-##   #filter(estimator=='PSW'|rhat<1.1)
 
 ### figure for paper
 violin <- bp(pd,
@@ -340,12 +316,8 @@ sink()
  coverage <- pd%>%
   filter(rhat<1.1)%>%
   group_by(n,mu01,errDist,b1,interactionS,interactionZ,intS,intZ,eff,estimator)%>%
-   summarize(coverage=mean(CInormL<=pop & CInormU>=pop,na.rm=TRUE))%>%ungroup()
+   summarize(coverage=mean(CInormL<=samp & CInormU>=samp,na.rm=TRUE))%>%ungroup()
 
-coverageLognorm <- pdlognorm%>%
-  filter(rhat<1.1)%>%
-  group_by(n,mu01,errDist,b1,interactionS,interactionZ,intS,intZ,eff,estimator)%>%
-   summarize(coverage=mean(CInormL<=pop & CInormU>=pop,na.rm=TRUE))%>%ungroup()
 
 
 redCov <- function(coverage) paste0("\\rd{",sprintf("%.2f",coverage),"}")
@@ -356,33 +328,60 @@ condRed <- function(coverage,intZ,intS,estimator,errDist,b1=1)
 
 
 sink('results/coverageTab.tex')
-
-cbind(
-     coverage%>%
+map(c(0,0.3,0.5),function(b){
+   tab <- coverage%>%
       mutate(coverage=condRed(coverage,intZ,intS,estimator,errDist,b1))%>%
       filter(n==500,eff==1,errDist!='mix',mu01==0,b1==0,estimator!="\\textsc{psw}")%>%
-      transmute(`Residual\nDist.`=c(norm='Normal',unif='Uniform')[errDist],
+       transmute(`Residual\nDist.`=
+                      factor(c(norm='Normal',unif='Uniform',lognorm="Lognormal")[errDist],
+                            levels=c("Normal","Lognormal","Uniform")),
          `$\\bm{x}:Z$\nInt.?`=ifelse(intZ,'Yes','No'),
          `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
          estimator,#=c(Mixture="\\pmm",GEEPERs="\\geepers")[estimator],
          coverage)%>%
-     pivot_wider(names_from=estimator,values_from=coverage)
-   ,
-   coverage%>%filter(n==500,eff==1,errDist!='mix',mu01==0,b1==.3)%>%
-      mutate(coverage=condRed(coverage,intZ,intS,estimator,errDist))%>%
-    pivot_wider(names_from=estimator,values_from=coverage)%>%
-    select(`\\textsc{geepers}`,`\\textsc{pmm}`),
-    coverage%>%filter(n==500,eff==1,errDist!='mix',mu01==0,b1==.5)%>%
-      mutate(coverage=condRed(coverage,intZ,intS,estimator,errDist))%>%
-    pivot_wider(names_from=estimator,values_from=coverage)%>%
-    select(`\\textsc{geepers}`,`\\textsc{pmm}`)#%>%
-#    rename("\\pmm"="Mixture","\\geepers"="GEEPERs")
+       pivot_wider(names_from=estimator,values_from=coverage)
+   if(b==0) return(tab) else return(tab[,4:5])
+}
 )%>%
+    bind_cols(.name_repair="minimal")%>%
     kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
     add_header_above(c(" " = 3, "$\\\\alpha=0$" = 2,
                        "$\\\\alpha=0.3$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
     collapse_rows(columns=1,latex_hline="major",valign="middle")%>%
     footnote(general=c("\\\\footnotesize Based on 500 replications. $n=500$. Simulation standard error $\\\\approx 1$ percentage point. Estimates colored \\\\rd{red} indicate cases where the assumptions of the model are not met."),escape=FALSE,footnote_as_chunk = TRUE,threeparttable=TRUE)%>%print()
+sink()
+
+
+#######################################################
+#### type-1 error
+#######################################################
+type1err <- pd%>%
+  filter(rhat<1.1,estimator!='\\textsc{psw}',eff==0)%>%
+  group_by(n,mu01,errDist,dist,b1,intS,intZ,interactionS,interactionZ,eff,estimator)%>%
+   summarize(type1err=mean(abs(est)>2*se))%>%ungroup()
+
+
+sink("results/typeIerror.tex")
+map(c(0,0.3,0.5),function(b){
+    tab <- type1err%>%
+      mutate(type1err=condRed(type1err,intZ,intS,estimator,errDist,b1))%>%
+      filter(n==500,eff==0,errDist!='mix',mu01==0,b1==0,estimator!="\\textsc{psw}")%>%
+       transmute(`Residual\nDist.`=
+                      factor(c(norm='Normal',unif='Uniform',lognorm="Lognormal")[errDist],
+                            levels=c("Normal","Lognormal","Uniform")),
+         `$\\bm{x}:Z$\nInt.?`=ifelse(intZ,'Yes','No'),
+         `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
+         estimator,#=c(Mixture="\\pmm",GEEPERs="\\geepers")[estimator],
+         type1err)%>%
+       pivot_wider(names_from=estimator,values_from=type1err)
+   if(b==0) return(tab) else return(tab[,4:5])
+})%>%
+    bind_cols(.name_repair="minimal")%>%
+    kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
+    add_header_above(c(" " = 3, "$\\\\alpha=0$" = 2,
+                       "$\\\\alpha=0.3$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
+    collapse_rows(columns=1,latex_hline="major",valign="middle")%>%
+    footnote(general=c("\\\\footnotesize Based on 5000 replications. $n=500$. Simulation standard error $\\\\approx 1$ percentage point. Estimates colored \\\\rd{red} indicate cases where the assumptions of the model are not met."),escape=FALSE,footnote_as_chunk = TRUE,threeparttable=TRUE)%>%print()
 sink()
 
 ########################
