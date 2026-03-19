@@ -274,7 +274,7 @@ A21 <- function(psMod,outMod,data){
   X0 <- model.matrix(outMod)[risp,
                                -c(which(names(coef(outMod))%in%c('Z','Sp',"Z:Sp")),
                                   #grep('Z\\:|Sp\\:|\\:Z|\\:Sp',names(coef(outMod))),
-                                  which(names(coef(outMod))=="(Intercept)"))]
+                                  which(names(coef(outMod))=="(Intercept)")),drop=FALSE]
 
   if(intSx) V0 <- cbind(model.matrix(outMod)[risp,grep('Sp\\:',names(coef(outMod)))])
 
