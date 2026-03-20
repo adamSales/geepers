@@ -77,18 +77,48 @@ datNames <- function(data,trt='Z',out='Y',use='S',clust=NULL,block=NULL){
   data
 }
 
+getPointEst <- function(outMod,covFormY,data){
+
+    xbar0 <- colMeans(model.matrix(covFormY,data=data[data$Z==1&data$S==0,])[,-1])
+    xbar1 <- colMeans(model.matrix(covFormY,data=data[data$Z==1&data$S==1,])[,-1])
+
+    stopifnot(all.equal(names(xbar0),names(xbar1)))
+
+    coefs <- coef(outMod)
+
+    beta2 <- coefs["Z"]
+    beta3 <- coefs["Z:Sp"]
+
+    gamma3 <- coefs[paste0("Z:",names(xbar0))]
+    gamma4 <- coefs[paste0("Z:Sp:",names(xbar0))]
+
+    if(is.na(gamma3[1])) gamma3 <- 0
+    if(is.na(gamma4[1])) gamma4 <- 0
+
+    out <- list(
+        eff0=unname(beta2+sum(gamma3*xbar0)),
+        eff1=unname(beta2+beta3+sum((gamma3+gamma4)*xbar1))
+    )
+
+    out$diff <- out$eff1-out$eff0
+    out
+
+}
+
 ### computes/returns regression models
-pointEst <- function(data,covFormU=~x1+x2,covFormY=covFormU,intSx=NULL,psMod=NULL){
+pointEst <- function(data,covFormU=~x1+x2,covFormY=covFormU,intSx=NULL,psMod=NULL,bayes=FALSE){
+
+    if(bayes) stopifnot(require(arm))
 
   data$S[data$Z==0] <- NA
 
-    if(is.null(psMod)) psMod <- glm(
-      update(covFormU,S~.),
-      data=data,family=binomial,
-      subset=!is.na(S))
-    else covFormU <- formula(psMod)[c(1,3)]
+    if(is.null(psMod)){
+        psMod <- if(bayes){
+                     bayesglm(update(covFormU,S~.),data=subset(data,!is.na(S)&Z==1),family=binomial)
+                 } else glm(update(covFormU,S~.),data=subset(data,!is.na(S)),family=binomial)
+    } else covFormU <- formula(psMod)[c(1,3)]
 
-  if(is.null(covFormY)) covFormY <- covFormU
+    if(is.null(covFormY)) covFormY <- covFormU
 
 
     attr(psMod,'auc') <- AUCmod(psMod)
@@ -96,8 +126,8 @@ pointEst <- function(data,covFormU=~x1+x2,covFormY=covFormU,intSx=NULL,psMod=NUL
     ps <- predict(psMod,data,type='response')
     if('Sp'%in%names(data)) warning('replacing Sp')
     data <- within(data,Sp <- ifelse(Z==1&!is.na(S),S,ps))
-
   outForm <- update(covFormY,Y~Z*Sp+.)
+
 #  outForm <- update(covFormY,Y~Z*Sp+.)
 
   if(!is.null(intSx))
@@ -107,9 +137,13 @@ pointEst <- function(data,covFormU=~x1+x2,covFormY=covFormU,intSx=NULL,psMod=NUL
   if('block'%in%names(data)) if(!is.null(data$block))
       outForm <- update(outForm,.~.+block)
 
-    outMod <- lm(outForm,data=data)
+    outMod <- if(bayes){
+                  bayesglm(update(covFormY,Y~Z*Sp*.),data=data,prior.scale=1,prior.df=Inf,scaled=FALSE)
+              } else lm(outForm,data=data)
 
-    list(psMod=psMod,outMod=outMod)
+    estimates <- getPointEst(outMod,covFormY,data)
+
+    list(psMod=psMod,outMod=outMod,estimates=estimates)
 }
 
 intEst0 <- function(dat){
@@ -206,28 +240,25 @@ vcvPS <- function(psMod,outMod,data,clust=NULL,int=any(grepl(":x",names(coef(out
 
 ### wrapper function for estimating regressions+vcov
 est <- function(data,covFormU=~x1+x2,covFormY=NULL,psMod=NULL,clust=NULL,intSx=NULL,
-                trt='Z',out='Y',use='S',block=NULL){
+                trt='Z',out='Y',use='S',block=NULL,bayes=FALSE){
 
   #if(!missing(psMod))
 
   data <- datNames(data,trt=trt,out=out,use=use,block=block,clust=clust)
 
-  Attach(pointEst(data=data,covFormU=covFormU,covFormY=covFormY,intSx=intSx,psMod=psMod))
+  Attach(pointEst(data=data,covFormU=covFormU,covFormY=covFormY,intSx=intSx,psMod=psMod,bayes=bayes))
 
   vcv <- vcvPS(psMod,outMod,data=data,clust=clust)
 
-  out <- list(outMod=outMod,psMod=psMod,vcv=vcv)
+  out <- list(outMod=outMod,psMod=psMod,vcv=vcv,estimates=estimates)
   class(out) <- c('geepers',class(out))
   out
 }
 
 ### estimates effects of interest, starting from est() output
 effsFromFit <- function(ests){
-    estimates <- with(as.list(coef(ests$outMod)),
-                      list(
-                          eff0=Z,
-                          eff1=Z+`Z:Sp`,
-                          diff=`Z:Sp`))
+    estimates <- ests$estimates
+
     vcv <- ests$vcv
     ddd <- diag(vcv)
     vars <- list(
@@ -274,7 +305,7 @@ A21 <- function(psMod,outMod,data){
   X0 <- model.matrix(outMod)[risp,
                                -c(which(names(coef(outMod))%in%c('Z','Sp',"Z:Sp")),
                                   #grep('Z\\:|Sp\\:|\\:Z|\\:Sp',names(coef(outMod))),
-                                  which(names(coef(outMod))=="(Intercept)"))]
+                                  which(names(coef(outMod))=="(Intercept)")),drop=FALSE]
 
   if(intSx) V0 <- cbind(model.matrix(outMod)[risp,grep('Sp\\:',names(coef(outMod)))])
 
@@ -353,4 +384,26 @@ psw <- function(dat,psMod,B=5000,verbose=TRUE,bsFun=bsInd){
       bs=bs)
   class(out) <- 'psw'
   out
+}
+
+
+
+estfun.lmridge <- function(x,data,...){
+    xmat <- model.matrix(formula(x),data=data)
+    #xmat <- naresid(x$na.action, xmat)
+    Kstar <- which(x$K==min(x$K[x$K>0]))
+    if (any(alias <- is.na(coef(x))))
+        xmat <- xmat[, !alias, drop = FALSE]
+    wts <- weights(x)
+    if (is.null(wts))
+        wts <- 1
+    res <- residuals(x)[,Kstar]
+    rval <- as.vector(res) * wts * xmat+2*x$K[Kstar]*coef(x)
+    attr(rval, "assign") <- NULL
+    attr(rval, "contrasts") <- NULL
+    if (is.zoo(res))
+        rval <- zoo(rval, index(res), attr(res, "frequency"))
+    if (is.ts(res))
+        rval <- ts(rval, start = start(res), frequency = frequency(res))
+    return(rval)
 }

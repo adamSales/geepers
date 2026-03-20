@@ -106,31 +106,37 @@ proc1 <- function(res1){
 }
 
 proc <- function(res){
-  cbind(
+  out <- cbind(
     res[[1]]$facs,
     map_dfr(res,proc1)%>%
       mutate(
         CInormL = est - 2 * se,
-        CInormU = est + 2 * se,
+        CInormU = est + 2 * se
+      )
+  )
+  if("CIpercL"%in%names(out))
+      out <- mutate(out,
         CIpercL = ifelse(is.na(CIpercL), CInormL, CIpercL),
         CIpercU = ifelse(is.na(CIpercU), CInormU, CIpercU)
       )
-  )
+  out
 }
 
 
 
 loadRes <- function(ext1='',ext2='',pswResults){
+    df <- FALSE
     if(file.exists(paste0('simResults',ext1,'/cases',ext2,'.RData'))){
         load(paste0('simResults',ext1,'/cases',ext2,'.RData'))
+        df <- TRUE
     } else cases <- cbind(
-      1:sum(grepl(paste0('sim[0-9]+',ext2,'\\.RData'),
-        list.files(paste0("simResults",ext1,"/")))))
+               grep(paste0('sim[0-9]+',ext2,'\\.RData'),list.files(paste0("simResults",ext1,"/")),value=TRUE)
+           )
 
     cat(nrow(cases),' cases to process\n')
     map_dfr(seq_len(nrow(cases)), function(i){
       cat(i,' ',sep='')
-      load(paste0('simResults',ext1,'/sim',i,ext2,'.RData'))
+      load(if(df) paste0('simResults',ext1,'/sim',i,ext2,'.RData') else paste0("simResults",ext1,"/",cases[i,1]))
       resT <- proc(res)
       resT$run <- i
       resT})
@@ -154,6 +160,10 @@ bp <- function(pd,subset,facet,title=deparse(substitute(subset)),
 
   if(missing(ylim)) ylim = quantile(pd$errP, c(0.01, 0.99))
 
+  pdSmall <- pd%>%
+      group_by(across(all_of(rownames(attr(terms(facet),"factors")))))%>%
+      sample_frac(0.1)%>%
+      ungroup()
 
   p <- ggplot(pd,
          aes(
@@ -162,7 +172,7 @@ bp <- function(pd,subset,facet,title=deparse(substitute(subset)),
            fill = estimator,
            color = estimator
          )) +
-    geom_jitter(alpha = 0.1) +
+    geom_jitter(data=pdSmall,alpha = 0.1) +
     geom_violin(#position = "dodge2",
       color = 'black',
       quantile.linetype="solid",

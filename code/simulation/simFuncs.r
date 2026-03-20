@@ -1,6 +1,6 @@
 #stanMod <- rstan::stan_model('ps.stan')#,auto_write=TRUE)
 
-bayes <- function(data,...){
+bayes <- function(data,returnFit=FALSE,...){
     sdat <- with(data, list(
                            nctl=sum(1-Z),
                            ntrt=sum(Z),
@@ -14,35 +14,108 @@ bayes <- function(data,...){
                        )
                  )
                                         #fit1 <-
-    output <- capture.output(fit <- stan('code/ps.stan',data=sdat))#,...))
-
+    output <- capture.output(fit <- stan('code/ps.stan',data=sdat,...))#,...))
+    if(returnFit) return(fit)
     summary(fit, par=c('eff0','eff1','effDiff'))$summary
 }
 
+pstrata <- function(data,...){
 
+    psobj <- PSObject(
+        S.formula=Z+S~x1+x2,
+        Y.formula=Y~x1+x2,
+        Y.family=gaussian(link="identity"),
+        data=data,
+        strata = c(nt = "00", co = "01"),
+        ER=c(nt=FALSE,co=FALSE)
+    )
+    standata <- make_standata(psobj)
+    output <-
+        capture.output(
+            stansamp <- post_samples <- PSSample(
+                    "code/pstrata.stan",
+                    data = standata))
+    ps1 <-    list(
+        PSobject = psobj,
+        post_samples = post_samples
+    )
+    class(ps1) <- "PStrata"
+    ps1%>%PSOutcome()%>%PSContrast(Z=TRUE)%>%summary("matrix")
+}
+
+
+makeDatPois <- function(n,mu01,mu10,mu11,b1,intS,intZ,oppSignsPS=TRUE,
+                        intZfunc=\(x1,x2) sqrt(1/6)/2*(x1+x2)){
+
+    x1=exp(rnorm(2*n,0,sqrt(s2)))
+    x2=exp(rnorm(2*n,0,sqrt(s2)))
+    x3=exp(rnorm(2*n,0,sqrt(s2)))
+
+    x1 <- runif(n,0,1/4)
+    x2 <- runif(n,0,1/4)
+    x3 <- runif(n,0,1/4)
+
+
+    linPred <- if(oppSignsPS) b1*(x1+x3)-b1*x2 else b1*(x1+x3+x2)
+    fout <- rep(c(0,1),n)
+    intercept <- coef(glm(fout~1,family=binomial,offset=b1*(x1+x2+x3)/3))[1]
+    psTrue <- plogis(b1*(x1+x2+x3)/3+intercept)
+
+    S <- rbinom(2*n,1,psTrue)
+
+    Z <- rep(c(1,0),n)
+
+    #beta <- 1/sqrt(6)#1/(6*exp(s2/2))
+
+    beta <- mean(x1+x2+x3)/var(x1+x2+x3)
+
+    lambdaC <- beta*(x1+x2+x3)+mu01*S
+    if(intS) lambdaC <- lambdaC-beta/4*(x1+x2)+S*beta/2*(x1+x2)
+
+    lambdaT <- lambdaC+mu10+(mu11-mu01-mu10)*S
+    if(intZ) lambdaT <- lambdaT+intZfunc(x1,x2)
+
+    Yt <- rpois(2*n,lambdaT)
+    Yc <- rpois(2*n,lambdaC)
+    Y <- Yc*(1-Z)+Yt*Z
+    sig <- sd(Y)
+
+    dat <- data.frame(Y,Z,S=ifelse(Z==1,S,0),x1,x2,Strue=S)
+    attr(dat,'trueEffs') <- c(
+        S0=mean(Yt[S==0]-Yc[S==0]),
+        S1=mean(Yt[S==1]-Yc[S==1])
+    )#/sig
+    facs <- as.list(match.call())[-1]
+    facs$intZfunc <- NULL
+    attr(dat,'facs') <- facs
+    attr(dat, "intZfunc") <- intZfunc
+
+    dat
+}
+
+
+s <- log(37)
+m <- -s/2-log(6)
 
 ### mu00=0
-makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE,oppSignsPS=TRUE){
+makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,oppSignsPS=TRUE,
+                    intZfunc=\(x1,x2) sqrt(1/6)/2*(x1+x2)){
 
-    if(debug){
-      print("debugging--parameter values set to defaults")
-      if(missing(n)) n <- 1000
-      if(missing(mu01)) mu01 <- 0.3
-      if(missing(mu10)) mu01 <- 0.3
-      if(missing(mu11)) mu11 <- 0.3
-      if(missing(b1)) b1 <- 0.5
-      if(missing(errDist)) errDist <- "norm"
-      if(missing(intS)) intS <- FALSE
-      if(missing(intZ)) intZ <- FALSE
-      }
+    if(errDist=="pois")
+        return(makeDatPois(n=n,mu01=mu01,mu10=mu10,mu11=mu11,b1=b1,intS=intS,intZ=intZ,
+                           oppSignsPS=oppSignsPS,intZfunc=intZfunc))
 
     x1 <- rnorm(2*n)
     x2 <- rnorm(2*n)
-    x3 <- if(errDist=='norm'){
-        rnorm(2*n)
-     } else if(errDist=="lognorm") {
-        exp(rnorm(2*n,0,sqrt(log((1+sqrt(5))/2))))
-      } else runif(2*n,-sqrt(12)/2,sqrt(12)/2)
+    x3 <- if(is.character(errDist)){
+              if(errDist=='norm'){
+                  rnorm(2*n)
+              } else if(errDist=="lognorm") {
+                  exp(rnorm(2*n,0,sqrt(log((1+sqrt(5))/2))))
+              } else if(errDist=="unif"){
+                  runif(2*n,-sqrt(12)/2,sqrt(12)/2)
+              }
+          } else errDist(2*n)
 
     x1 <- x1-mean(x1)
     x2 <- x2-mean(x2)
@@ -54,11 +127,13 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE,oppSignsPS
 
     Z <- rep(c(1,0),n)
 
-    error <- if(errDist=='norm') rnorm(2*n,0,sqrt(0.5))
-             else if(errDist=='mix') c(rnorm(3*n/2,-1/3,sqrt(1/6)),rnorm(n/2,1,sqrt(1/6)))
-             else if(errDist=="lognorm") exp(rnorm(2*n,0,sqrt(log((1+sqrt(3))/2))))
-             else runif(2*n,-sqrt(6)/2,sqrt(6)/2)
-    error <- error-mean(error)
+    error <- if(is.character(errDist)){
+                 if(errDist=='norm') rnorm(2*n,0,sqrt(0.5))
+                 else if(errDist=='mix') c(rnorm(3*n/2,-1/3,sqrt(1/6)),rnorm(n/2,1,sqrt(1/6)))
+                 else if(errDist=="lognorm") exp(rnorm(2*n,0,sqrt(log((1+sqrt(3))/2))))
+                 else if(errDist=="unif") runif(2*n,-sqrt(6)/2,sqrt(6)/2)
+             }  else errDist(2*n)
+    error <- (error-mean(error))/sd(error)*sqrt(0.5)
 
     Yc <- sqrt(1/6)*(x1+x2+x3)+mu01*S+error
     if(intS) Yc <- Yc-sqrt(1/6)/4*(x1+x2)+S*sqrt(1/6)/2*(x1+x2)
@@ -66,7 +141,7 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE,oppSignsPS
     #x0 <- mean(x1[S==0]+x2[S==0])
 
     Yt <- Yc+mu10+(mu11-mu01-mu10)*S
-    if(intZ) Yt <- Yt+sqrt(1/6)/2*(x1+x2)
+    if(intZ) Yt <- Yt+intZfunc(x1,x2)
 
     Y <- ifelse(Z==1,Yt,Yc)
 
@@ -81,7 +156,10 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE,oppSignsPS
         S0=mean(Yt[S==0])-mean(Yc[S==0]),
         S1=mean(Yt[S==1])-mean(Yc[S==1])
     )
-    attr(dat,'facs') <- as.data.frame(as.list(match.call())[-1])
+    facs <- as.list(match.call())[-1]
+    facs$intZfunc <- NULL
+    attr(dat,'facs') <- facs
+    attr(dat, "intZfunc") <- intZfunc
 
     dat
 
@@ -122,11 +200,13 @@ simOne <- function(dat,estimators=list(mest=effs,bayes=bayes,psw=psw)){
 ## }
 
 
-oneCase <- function(nsim,ext,ncores,cl=NULL, facs,estimators){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
+oneCase <- function(nsim,ext,ncores,cl=NULL, facs,estimators,intZfunc){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
 
 #    print(Sys.time())
 
     if(!is.null(cl)) clusterExport(cl,list="facs",envir=environment())
+
+    facs=c(facs,intZfunc=intZfunc)
 
      datasets <-
      if(is.null(cl)) mclapply(1:nsim,function(i) do.call("makeDat",facs),mc.cores=ncores)
@@ -181,7 +261,8 @@ fullsim <- function(nsim,
                     ncores=8,
                     cl=NULL,
                     start=1,
-                    estimators=list(mest=effs,bayes=bayes,psw=psw)
+                    estimators=list(mest=effs,bayes=bayes,psw=psw),
+                    intZfunc=\(x1,x2) sqrt(1/6)/2*(x1+x2)
                     ){
 
     cases=expand.grid(
@@ -191,9 +272,10 @@ fullsim <- function(nsim,
 		mu11=mu11,
     oppSignsPS=oppSignsPS,
 		errDist=errDist,
-                b1=b1s,
-                intS=intS,
-                intZ=intZ,
+    b1=b1s,
+    intS=intS,
+    intZ=intZ,
+    #intZfunc=intZfunc,
 		stringsAsFactors=FALSE)
 
     cat(nrow(cases),' conditions\n')
@@ -204,7 +286,7 @@ fullsim <- function(nsim,
     	  cat(round(i/nrow(cases)*100),'%\n')
 	  facs <- cases[i,]
     	  res <- oneCase(nsim=nsim,ext=paste0(i,ext),
-                         ncores=ncores,cl=cl,facs=facs,estimators=estimators)
+                         ncores=ncores,cl=cl,facs=facs,estimators=estimators,intZfunc)
 	  save(res,facs,file=paste0('simResults/sim',i,ext,'.RData'))
     }
 
