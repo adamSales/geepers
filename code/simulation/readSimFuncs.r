@@ -52,6 +52,17 @@ proc1mest <- function(res1){
   )
 }
 
+proc1pstrata <- function(res1){
+  tibble(
+    eff=c(0,1),
+    estimator="pstrata",
+    est=res1$pstrata[,"mean"],
+    se=res1$pstrata[,"sd"],
+    CIpercL=res1$pstrata[,"2.5%"],
+    CIpercU=res1$pstrata[,"97.5%"]
+  )
+}
+
 proc1bayes <- function(res1){
   tibble(
     eff = c(0,1),
@@ -80,7 +91,8 @@ proc1 <- function(res1){
   res <- bind_rows(
     proc1mest(res1),
     proc1bayes(res1),
-    proc1psw(res1)
+    proc1psw(res1),
+    proc1pstrata(res1)
   )
   res$pop = vapply(res$eff, muEff, facs=res1$facs, numeric(1))
   res$samp <- unname(res1$true[paste0("S",res$eff)])

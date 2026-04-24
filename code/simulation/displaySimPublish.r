@@ -199,6 +199,31 @@ pd <- results %>%
   ) #%>%
   #filter(estimator=='PSW'|rhat<1.1)
 
+pdLognorm <- resultsLognorm %>%
+  group_by(b1)%>%
+  mutate(AUCf=mean(auc,na.rm=TRUE))%>%
+  ungroup()%>%
+  mutate(
+    errP = est - pop,
+    B1 = factor(b1,levels=c(0,0.3,0.5),
+                labels=c(bquote(alpha==0),bquote(alpha==0.2),bquote(alpha==0.5))),
+    AUCff=paste0('AUC=',round(AUCf,1)),
+    N=paste0('n=',n),
+    M1=factor(mu01,levels=c("0","0.3"),
+              ##labels=c(bquote(mu[c]^1-mu[c]^0==0),bquote(mu[c]^1-mu[c]^0==0.3))),
+              labels=c(bquote(mu[c]^1==0),bquote(mu[c]^1==0.3))),
+    PE=paste('Stratum',eff),
+    dist=paste(c(mix='Mixture',unif='Unform',norm='Normal')[errDist],'Errors'),
+    #estimator=c(bayes='Mixture',mest='GEEPERs',psw='PSW')[estimator],
+    estimator=c(bayes='\\textsc{pmm}',mest='\\textsc{geepers}',psw='\\textsc{psw}')[estimator],
+    interactionZ=ifelse(intZ,"Z\ninteraction","No Z\ninteraction"),
+    interactionS=ifelse(intS,"S\ninteraction","No S\ninteraction"),
+    intAll=ifelse(intZ,ifelse(intS,"$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$","$\\bm{x}\\text{:}Z$"),ifelse(intS,"$\\bm{x}\\text{:}S_T$","No inter.")),
+    intAll=factor(intAll,levels=c("No inter.","$\\bm{x}\\text{:}Z$", "$\\bm{x}\\text{:}S_T$","$\\bm{x}\\text{:}S_T$\\&$\\bm{x}\\text{:}Z$"))
+  ) %>%
+  filter(estimator=='PSW'|rhat<1.1)
+
+
 ### figure for paper
 
 norm<-bp(pd,
@@ -248,6 +273,23 @@ lognorm<-bp(pd,
         legend.position="none")+
   scale_fill_manual(values=c('#1b9e77','#d95f02','#7570b3'))+
   scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3'))
+
+lognorm<-bp(pdLognorm,
+   subset=b1 > 0& errDist=='lognorm'& eff==1&mu01==0&n==500&PE=='Stratum 1',
+   title="Lognormal Residuals",ylim=c(-1.5,1.5),#c(-1.5,1.5),
+   facet=B1~intAll,#interactionZ+interactionS,
+   Labeller=labeller(B1=label_parsed,intAll=label_value),labSize=2.
+   )+
+    labs(y=NULL,#bquote("Estimation Error for "~tau^1),#subtitle="No Interactions",
+         x=NULL)+
+  #theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+                                        #plot.subtitle = element_text(size=10),
+        legend.position="none")+
+  scale_fill_manual(values=c('#1b9e77','#d95f02','#7570b3'))+
+  scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3'))
+
+
 
 #pdf(
 tikz("simFigs/boxplotsNew.tex",#pdf",
@@ -485,3 +527,36 @@ resultsB1s%>%
   ggsave('simFigs/alphaAUC.pdf',width=5,height=4)
                                         #  scale_y_continuous('Avg. AUC',seq(.5,1,.1))
 
+
+
+
+### standard error estimates?
+results%>%filter(estimator=="mest",eff==1,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(seError)%>%print(n=Inf)
+
+
+results%>%filter(estimator=="mest",eff==0,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(seError)%>%print(n=Inf)
+
+results%>%filter(estimator=="mest",eff==1,b1>0,run==14)%>%pull(se)%>%hist()
+
+
+results%>%filter(estimator=="bayes",eff==1,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(seError)%>%print(n=Inf)
+
+
+results%>%filter(estimator=="mest",eff==0,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(seError)%>%print(n=Inf)
+
+
+resultsNs%>%filter(estimator=="mest",eff==1,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(n)%>%print(n=Inf)
+
+resultsB1s%>%filter(estimator=="mest",eff==1,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(b1)%>%print(n=Inf)

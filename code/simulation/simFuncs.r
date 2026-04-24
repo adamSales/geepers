@@ -1,6 +1,7 @@
-#stanMod <- rstan::stan_model('ps.stan')#,auto_write=TRUE)
+#stanMod <- rstan::stan_model('code/ps.stan')#,auto_write=TRUE)
+#stanModNox1<- rstan::stan_model('code/psNoX1.stan')#,auto_write=TRUE)
 
-bayes <- function(data,...){
+bayes <- function(data,nox1=FALSE,...){
     sdat <- with(data, list(
                            nctl=sum(1-Z),
                            ntrt=sum(Z),
@@ -13,16 +14,43 @@ bayes <- function(data,...){
                            St=S[Z==1]
                        )
                  )
-                                        #fit1 <-
-    output <- capture.output(fit <- stan('code/ps.stan',data=sdat))#,...))
-
+    if(nox1){
+	output <- capture.output(fit <- sampling(stanModNox1,data=sdat))#,...))
+    } else{    
+                                       #fit1 <-
+        output <- capture.output(fit <- sampling(stanPSmod,data=sdat))#,...))
+    }
+    
     summary(fit, par=c('eff0','eff1','effDiff'))$summary
 }
 
+pstrata <- function(data,...){
+
+    psobj <- PSObject(
+        S.formula=Z+S~x1+x2,
+        Y.formula=Y~x1+x2,
+        Y.family=gaussian(link="identity"),
+        data=data,
+        strata = c(nt = "00", co = "01"),
+        ER=c(nt=FALSE,co=FALSE)
+    )
+    standata <- make_standata(psobj)
+    output <-
+        capture.output(
+            stansamp <- post_samples <- PSSample(
+                    "code/pstrata.stan",
+                    data = standata))
+    ps1 <-    list(
+        PSobject = psobj,
+        post_samples = post_samples
+    )
+    class(ps1) <- "PStrata"
+    ps1%>%PSOutcome()%>%PSContrast(Z=TRUE)%>%summary("matrix")
+}
 
 
 ### mu00=0
-makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE){
+makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,oneVarInt=FALSE,debug=FALSE){
 
     if(debug){
       print("debugging--parameter values set to defaults")
@@ -66,7 +94,9 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE){
     #x0 <- mean(x1[S==0]+x2[S==0])
 
     Yt <- Yc+mu10+(mu11-mu01-mu10)*S
-    if(intZ) Yt <- Yt+sqrt(1/6)/2*(x1+x2)
+    if(intZ)
+	Yt <- Yt+ sqrt(1/6)/2*(if(oneVarInt) x1 else x1+x2)
+
 
     Y <- ifelse(Z==1,Yt,Yc)
 
@@ -88,11 +118,11 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,debug=FALSE){
 }
 
 
-simOneBayes <- function(dat){
+simOneBayes <- function(dat,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE){
 
-    mest <- effs(dat)
-    BAYES <- bayes(dat,chains=2,iter=3000,warmup=1000)
-    PSW <- psw(dat)
+    if(geepers) mest <- if(nox1) effs(dat,covFormU=~x2) else effs(dat) else mest <- NULL
+    BAYES <- if(pmm) bayes(dat,nox1=nox1,chains=2,iter=3000,warmup=1000) else NULL
+    PSW <-  if(psweight) pswSim(dat,nox1=nox1) else NULL
 
     list(
         true=attr(dat,'trueEffs'),
@@ -104,7 +134,7 @@ simOneBayes <- function(dat){
 }
 
 
-oneCase <- function(nsim,ext,ncores,cl=NULL, facs){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
+oneCase <- function(nsim,ext,ncores,cl=NULL, facs,oneVarInt=FALSE,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
 
 #    print(Sys.time())
 
@@ -129,14 +159,14 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs){ #n,mu00,mu01,mu10,mu11,gumb,
         if(is.null(cl)){
 	    	mclapply(
 		    	datasets,
-                	function(dat) try(simOneBayes(dat)),
+                	function(dat) try(simOneBayes(dat,nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight)),
                 	mc.cores=ncores
             		)
 	     } else{
 	     	    foreach(i = 1:nsim,
                     .packages=c("sandwich","dplyr","rstan"),
                     .options.snow = opts) %dopar% {
-                        try(simOneBayes(datasets[[i]]))
+                        try(simOneBayes(datasets[[i]],nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight))
                     }
          }
 #                  parLapply(cl,datasets, function(dat) try(simOneBayes(dat)))
@@ -161,7 +191,10 @@ fullsim <- function(nsim,
                     se=TRUE,
                     ncores=8,
 		    cl=NULL,
-		    start=1
+		    start=1,
+		    oneVarInt=FALSE,
+		    nox1=FALSE,
+		    geepers=TRUE,pmm=TRUE,psweight=TRUE
                     ){
 
     cases=expand.grid(
@@ -173,6 +206,7 @@ fullsim <- function(nsim,
                 b1=b1s,
                 intS=intS,
                 intZ=intZ,
+		oneVarInt=oneVarInt,
 		stringsAsFactors=FALSE)
 
     cat(nrow(cases),' conditions\n')
@@ -183,7 +217,7 @@ fullsim <- function(nsim,
     	  cat(round(i/nrow(cases)*100),'%\n')
 	  facs <- cases[i,]
     	  res <- oneCase(nsim=nsim,ext=paste0(i,ext),
-                         ncores=ncores,cl=cl,facs=facs)
+                         ncores=ncores,cl=cl,facs=facs,oneVarInt=oneVarInt,nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight)
 	  save(res,facs,file=paste0('simResults/sim',i,ext,'.RData'))
     }
 
@@ -222,10 +256,13 @@ fullsimJustM <- function(nsim,
 }
 
 
-psw=function(dat,psMod){
-
-  if(missing(psMod)) psMod=glm(S~x1+x2,data=dat,subset=Z==1,family=binomial)
-
+pswSim=function(dat,psMod,nox1){
+  
+  if(missing(psMod)){
+	if(nox1){
+		psMod=glm(S~x2,data=dat,subset=Z==1,family=binomial)
+		} else psMod=glm(S~x1+x2,data=dat,subset=Z==1,family=binomial)
+  }
   dat0=subset(dat,Z==0)
   dat1=subset(dat,Z==1)
   dat0$ps=predict(psMod,dat0,type='response')
