@@ -66,7 +66,7 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,oneVarInt=FALSE,debug=
 
     x1 <- rnorm(2*n)
     x2 <- rnorm(2*n)
-    x3 <- if(errDist=='norm'){ 
+    x3 <- if(errDist=='norm'){
         rnorm(2*n)
      } else if(errDist=="lognorm") {
         exp(rnorm(2*n,0,sqrt(log((1+sqrt(5))/2))))
@@ -137,8 +137,8 @@ simOneBayes <- function(dat,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE){
 oneCase <- function(nsim,ext,ncores,cl=NULL, facs,oneVarInt=FALSE,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
 
 #    print(Sys.time())
-    
-    clusterExport(cl,list="facs",envir=environment())
+
+    if(!is.null(cl)) clusterExport(cl,list="facs",envir=environment())
 
      datasets <-
      if(is.null(cl)) mclapply(1:nsim,function(i) do.call("makeDat",facs),mc.cores=ncores)
@@ -146,12 +146,13 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs,oneVarInt=FALSE,nox1=FALSE,gee
 
     save(datasets,file=paste0('simData/dat',ext,'.RData'))
 
-    clusterExport(cl,"datasets",envir=environment())
+    if(!is.null(cl)){
+        clusterExport(cl,"datasets",envir=environment())
 
-    pb <- txtProgressBar(max = nsim, style = 3)
-    progress_fun <- function(nn) setTxtProgressBar(pb, nn)
-    opts <- list(progress = progress_fun)
-
+        pb <- txtProgressBar(max = nsim, style = 3)
+        progress_fun <- function(nn) setTxtProgressBar(pb, nn)
+        opts <- list(progress = progress_fun)
+    }
 
     startTime <- Sys.time()
     res <-
@@ -301,3 +302,5 @@ xSim <- function(){
        mean(x12[S==1]),
        mean(x12[S==0]))
 }
+
+
