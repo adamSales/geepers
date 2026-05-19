@@ -33,7 +33,7 @@ tikzLualatexPackages = c(
 )
 )
 
-source('code/simulation/readSimFuncs.r')
+source('code/readSimFuncs.r')
 
 #### after simulation results have been loaded and pre-processed...
 ## source('code/simulation/readSim.r')

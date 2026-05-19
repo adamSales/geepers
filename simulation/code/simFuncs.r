@@ -1,5 +1,3 @@
-#stanMod <- rstan::stan_model('code/ps.stan')#,auto_write=TRUE)
-#stanModNox1<- rstan::stan_model('code/psNoX1.stan')#,auto_write=TRUE)
 
 bayes <- function(data,nox1=FALSE,...){
     sdat <- with(data, list(
@@ -16,41 +14,17 @@ bayes <- function(data,nox1=FALSE,...){
                  )
     if(nox1){
 	output <- capture.output(fit <- sampling(stanModNox1,data=sdat))#,...))
-    } else{    
+    } else{
                                        #fit1 <-
         output <- capture.output(fit <- sampling(stanPSmod,data=sdat))#,...))
     }
-    
+
     summary(fit, par=c('eff0','eff1','effDiff'))$summary
-}
-
-pstrata <- function(data,...){
-
-    psobj <- PSObject(
-        S.formula=Z+S~x1+x2,
-        Y.formula=Y~x1+x2,
-        Y.family=gaussian(link="identity"),
-        data=data,
-        strata = c(nt = "00", co = "01"),
-        ER=c(nt=FALSE,co=FALSE)
-    )
-    standata <- make_standata(psobj)
-    output <-
-        capture.output(
-            stansamp <- post_samples <- PSSample(
-                    "code/pstrata.stan",
-                    data = standata))
-    ps1 <-    list(
-        PSobject = psobj,
-        post_samples = post_samples
-    )
-    class(ps1) <- "PStrata"
-    ps1%>%PSOutcome()%>%PSContrast(Z=TRUE)%>%summary("matrix")
 }
 
 
 ### mu00=0
-makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,oneVarInt=FALSE,debug=FALSE){
+makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,oneVarInt=TRUE,debug=FALSE){
 
     if(debug){
       print("debugging--parameter values set to defaults")
@@ -83,7 +57,6 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,oneVarInt=FALSE,debug=
     Z <- rep(c(1,0),n)
 
     error <- if(errDist=='norm') rnorm(2*n,0,sqrt(0.5))
-             else if(errDist=='mix') c(rnorm(3*n/2,-1/3,sqrt(1/6)),rnorm(n/2,1,sqrt(1/6)))
              else if(errDist=="lognorm") exp(rnorm(2*n,0,sqrt(log((1+sqrt(3))/2))))
              else runif(2*n,-sqrt(6)/2,sqrt(6)/2)
     error <- error-mean(error)
@@ -91,20 +64,12 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,oneVarInt=FALSE,debug=
     Yc <- sqrt(1/6)*(x1+x2+x3)+mu01*S+error
     if(intS) Yc <- Yc-sqrt(1/6)/4*(x1+x2)+S*sqrt(1/6)/2*(x1+x2)
 
-    #x0 <- mean(x1[S==0]+x2[S==0])
-
     Yt <- Yc+mu10+(mu11-mu01-mu10)*S
     if(intZ)
 	Yt <- Yt+ sqrt(1/6)/2*(if(oneVarInt) x1 else x1+x2)
 
 
     Y <- ifelse(Z==1,Yt,Yc)
-
-    ## if(!norm){
-    ##     Y <- round(Y)
-    ##     #Y[Y< -4] <- 4
-    ##     #Y[Y> 4] <- 4
-    ## }
 
     dat <- data.frame(Y,Z,S=ifelse(Z==1,S,0),x1,x2,Strue=S)
     attr(dat,'trueEffs') <- c(
@@ -134,9 +99,8 @@ simOneBayes <- function(dat,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE){
 }
 
 
-oneCase <- function(nsim,ext,ncores,cl=NULL, facs,oneVarInt=FALSE,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
+oneCase <- function(nsim,ext,ncores,cl=NULL, facs,oneVarInt=TRUE,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE){
 
-#    print(Sys.time())
 
     if(!is.null(cl)) clusterExport(cl,list="facs",envir=environment())
 
@@ -146,7 +110,14 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs,oneVarInt=FALSE,nox1=FALSE,gee
 
     save(datasets,file=paste0('simData/dat',ext,'.RData'))
 
-    if(!is.null(cl)){
+    estimate(datasets,nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight,cl=cl)
+
+}
+
+estimate <- function(datasets,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE,cl=NULL){
+	 nsim <- length(datasets)
+
+     if(!is.null(cl)){
         clusterExport(cl,"datasets",envir=environment())
 
         pb <- txtProgressBar(max = nsim, style = 3)
@@ -157,11 +128,11 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs,oneVarInt=FALSE,nox1=FALSE,gee
     startTime <- Sys.time()
     res <-
         if(is.null(cl)){
-	    	mclapply(
-		    	datasets,
-                	function(dat) try(simOneBayes(dat,nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight)),
-                	mc.cores=ncores
-            		)
+            lapply(
+                datasets,
+                function(dat)
+                    try(simOneBayes(dat,nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight)))
+
 	     } else{
 	     	    foreach(i = 1:nsim,
                     .packages=c("sandwich","dplyr","rstan"),
@@ -169,20 +140,19 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs,oneVarInt=FALSE,nox1=FALSE,gee
                         try(simOneBayes(datasets[[i]],nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight))
                     }
          }
-#                  parLapply(cl,datasets, function(dat) try(simOneBayes(dat)))
 
     time <- Sys.time() - startTime
-#    print(time)
 
   attr(res,"time") <- time
   res
 }
 
+
 fullsim <- function(nsim,
                     ns=c(100,500,1000),
-                    mu01=c(0,.3),#sepTs=c(TRUE,FALSE),
-                    mu10=c(0,.3),#sepCs=c(TRUE,FALSE),
-                    mu11=.3,#effs=c(TRUE,FALSE),
+                    mu01=c(0,.3),
+                    mu10=c(0,.3),
+                    mu11=.3,
                     errDist=c('norm','lognorm','unif'),
                     b1s=c(0,0.3,0.5),
                     ext='',
@@ -192,7 +162,7 @@ fullsim <- function(nsim,
                     ncores=8,
 		    cl=NULL,
 		    start=1,
-		    oneVarInt=FALSE,
+		    oneVarInt=TRUE,
 		    nox1=FALSE,
 		    geepers=TRUE,pmm=TRUE,psweight=TRUE
                     ){
@@ -224,40 +194,10 @@ fullsim <- function(nsim,
     return(0)
 }
 
-fullsimJustM <- function(nsim,
-                    ns=c(100,500,1000),
-                    mu01=c(0,.3),#sepTs=c(TRUE,FALSE),
-                    mu10=c(0,.3),#sepCs=c(TRUE,FALSE),
-                    mu11=.3,#effs=c(TRUE,FALSE),
-                    gumbs=c(TRUE,FALSE),
-                    b1s=c(0,0.2,0.5,1),
-                    ext='',
-                    se=TRUE,
-                    cl=NULL,
-                    Bayes=FALSE,
-		    start=1
-                    ){
-
-    cases=expand.grid(ns,mu01,mu10,mu11,gumbs,b1s)
-    names(cases) <- c('n','mu01','mu10','mu11','gumb','b1')
-
-    if(nsim==0) return(cases)
-
-    cat('% done:')
-    list(cases=cases,
-         res=lapply(
-             1:nrow(cases),
-             function(i){
-                 cat(round(i/nrow(cases)*100))
-                 replicate(nsim,effs(do.call("makeData",cases[i,])))
-             }
-         )
-         )
-}
 
 
 pswSim=function(dat,psMod,nox1){
-  
+
   if(missing(psMod)){
 	if(nox1){
 		psMod=glm(S~x2,data=dat,subset=Z==1,family=binomial)
@@ -279,28 +219,4 @@ pswSim=function(dat,psMod,nox1){
     attributes(dat)$trueEffs
     )
 }
-
-
-xSim <- function(){
-     n <- 10000
- mu01=0.2
- mu10=0
- mu11=0.5
- b1=1
- errDist='norm'
- x1 <- rnorm(2*n)
- x2 <- rnorm(2*n)
- x3 <- if(errDist=='norm') rnorm(2*n) else runif(2*n,-sqrt(12)/2,sqrt(12)/2)
- x1 <- x1-mean(x1)
- x2 <- x2-mean(x2)
- x3 <- x3-mean(x3)
- psTrue <- plogis(b1*(x1+x3)-b1*x2)
- S <- rbinom(2*n,1,psTrue)
- Z <- rep(c(1,0),n)
- x12 <- x1+x2
-     c(mean(x12),
-       mean(x12[S==1]),
-       mean(x12[S==0]))
-}
-
 
