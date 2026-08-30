@@ -76,8 +76,8 @@ geepersEstimates <-
 
 geepersEstimates%>%
     mutate(
-        eff=factor(c(eff0="Never Takers",eff1="Compliers",ATE="ATE")[eff],
-                   levels=c("Never Takers","ATE","Compliers")),
+        eff=factor(c(eff0="Never-Takers",eff1="Compliers",ATE="ATE")[eff],
+                   levels=c("Never-Takers","ATE","Compliers")),
         model=factor(modelNames[model],levels=modelNames)
     )%>%
     ggplot(aes(model,estimates,ymin=ymin,ymax=ymax))+
@@ -87,7 +87,7 @@ geepersEstimates%>%
     geom_hline(yintercept=0)+geom_hline(yintercept=ate$estimates,linetype="dotted")+
     theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))+
     xlab(NULL)+ylab("Principal Effect")
-ggsave("figure/prinEffs.pdf",width=6,height=2.5,units="in")
+ggsave("figure/prinEffs.jpg",width=6,height=2.5,units="in")
 
 
 ## alternative methods
@@ -128,8 +128,8 @@ print(
         filter(geepersEstimates,model%in%c("psModStep","ATE")),
         altEstimates)%>%
     mutate(
-        eff=factor(c(eff0="Never Takers",eff1="Compliers",ATE="ATE")[eff],
-                   levels=c("Never Takers","ATE","Compliers")),
+        eff=factor(c(eff0="Never-Takers",eff1="Compliers",ATE="ATE")[eff],
+                   levels=c("Never-Takers","ATE","Compliers")),
         model=factor(
             ifelse(model=="psModStep","\\textsc{geepers}",modelNames[model]),
             levels=c("\\textsc{geepers}",modelNames)))%>%
@@ -158,8 +158,8 @@ bind_rows(
         model="psModStep")
 )%>%
     mutate(
-        eff=factor(c(eff0="Never Takers",eff1="Compliers",ATE="ATE")[eff],
-                   levels=c("Never Takers","ATE","Compliers")),
+        eff=factor(c(eff0="Never-Takers",eff1="Compliers",ATE="ATE")[eff],
+                   levels=c("Never-Takers","ATE","Compliers")),
         `PS Model`=factor(modelNames[model],levels=modelNames),
         Estimate=paste0(
             sprintf("%.2f",round(estimates,2)),
