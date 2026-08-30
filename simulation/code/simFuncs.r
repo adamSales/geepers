@@ -1,6 +1,5 @@
-#stanMod <- rstan::stan_model('ps.stan')#,auto_write=TRUE)
 
-bayes <- function(data,returnFit=FALSE,...){
+bayes <- function(data,nox1=FALSE,...){
     sdat <- with(data, list(
                            nctl=sum(1-Z),
                            ntrt=sum(Z),
@@ -13,9 +12,13 @@ bayes <- function(data,returnFit=FALSE,...){
                            St=S[Z==1]
                        )
                  )
-                                        #fit1 <-
-    output <- capture.output(fit <- stan('code/ps.stan',data=sdat,...))#,...))
-    if(returnFit) return(fit)
+    if(nox1){
+	output <- capture.output(fit <- sampling(stanModNox1,data=sdat))#,...))
+    } else{
+                                       #fit1 <-
+        output <- capture.output(fit <- sampling(stanPSmod,data=sdat))#,...))
+    }
+
     summary(fit, par=c('eff0','eff1','effDiff'))$summary
 }
 
@@ -138,18 +141,11 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,oppSignsPS=TRUE,
     Yc <- sqrt(1/6)*(x1+x2+x3)+mu01*S+error
     if(intS) Yc <- Yc-sqrt(1/6)/4*(x1+x2)+S*sqrt(1/6)/2*(x1+x2)
 
-    #x0 <- mean(x1[S==0]+x2[S==0])
-
     Yt <- Yc+mu10+(mu11-mu01-mu10)*S
-    if(intZ) Yt <- Yt+intZfunc(x1,x2)
+    if(intZ)
+        Yt <- Yt+ sqrt(1/6)/2*(if(oneVarInt) x1 else x1+x2)
 
     Y <- ifelse(Z==1,Yt,Yc)
-
-    ## if(!norm){
-    ##     Y <- round(Y)
-    ##     #Y[Y< -4] <- 4
-    ##     #Y[Y> 4] <- 4
-    ## }
 
     dat <- data.frame(Y,Z,S=ifelse(Z==1,S,0),x1,x2,Strue=S)
     attr(dat,'trueEffs') <- c(
@@ -166,11 +162,11 @@ makeDat <- function(n,mu01,mu10,mu11,b1,errDist,intS,intZ,oppSignsPS=TRUE,
 }
 
 
-simOneBayes <- function(dat){
+simOneBayes <- function(dat,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE){
 
-    mest <- effs(dat)
-    BAYES <- bayes(dat,chains=2,iter=3000,warmup=1000)
-    PSW <- psw(dat)
+    if(geepers) mest <- if(nox1) effs(dat,covFormU=~x2) else effs(dat) else mest <- NULL
+    BAYES <- if(pmm) bayes(dat,nox1=nox1,chains=2,iter=3000,warmup=1000) else NULL
+    PSW <-  if(psweight) pswSim(dat,nox1=nox1) else NULL
 
     list(
         true=attr(dat,'trueEffs'),
@@ -182,27 +178,8 @@ simOneBayes <- function(dat){
 }
 
 
-simOne <- function(dat,estimators=list(mest=effs,bayes=bayes,psw=psw)){
+oneCase <- function(nsim,ext,ncores,cl=NULL, facs,oneVarInt=TRUE,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE){
 
-    out <- lapply(estimators, \(fun) fun(dat))
-    out$true <- attr(dat,'trueEffs')
-    out$facs <- attr(dat,"facs")
-
-    out
-}
-  ##   list(
-
-##         mest=mest,
-##         psw=PSW,
-##         bayes=BAYES,
-##         facs=attr(dat,'facs')
-##     )
-## }
-
-
-oneCase <- function(nsim,ext,ncores,cl=NULL, facs,estimators,intZfunc){ #n,mu00,mu01,mu10,mu11,gumb,b1,cl){
-
-#    print(Sys.time())
 
     if(!is.null(cl)) clusterExport(cl,list="facs",envir=environment())
 
@@ -214,7 +191,14 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs,estimators,intZfunc){ #n,mu00,
 
     save(datasets,file=paste0('simData/dat',ext,'.RData'))
 
-    if(!is.null(cl)){
+    estimate(datasets,nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight,cl=cl)
+
+}
+
+estimate <- function(datasets,nox1=FALSE,geepers=TRUE,pmm=TRUE,psweight=TRUE,cl=NULL){
+	 nsim <- length(datasets)
+
+     if(!is.null(cl)){
         clusterExport(cl,"datasets",envir=environment())
         clusterExport(cl,"estimators",envir=environment())
 
@@ -226,32 +210,30 @@ oneCase <- function(nsim,ext,ncores,cl=NULL, facs,estimators,intZfunc){ #n,mu00,
     startTime <- Sys.time()
     res <-
         if(is.null(cl)){
-	    	mclapply(
-		    	datasets,
-                	function(dat) try(simOne(dat,estimators=estimators)),
-                	mc.cores=ncores
-            		)
+            lapply(
+                datasets,
+                function(dat)
+                    try(simOneBayes(dat,nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight)))
 	     } else{
 	     	    foreach(i = 1:nsim,
                     .packages=c("sandwich","dplyr","rstan"),
                     .options.snow = opts) %dopar% {
-                        try(simOne(datasets[[i]],estimators=estimators))
+                        try(simOneBayes(datasets[[i]],nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight))
                     }
          }
-#                  parLapply(cl,datasets, function(dat) try(simOneBayes(dat)))
 
     time <- Sys.time() - startTime
-#    print(time)
 
   attr(res,"time") <- time
   res
 }
 
+
 fullsim <- function(nsim,
                     ns=c(100,500,1000),
-                    mu01=c(0,.3),#sepTs=c(TRUE,FALSE),
-                    mu10=c(0,.3),#sepCs=c(TRUE,FALSE),
-                    mu11=.3,#effs=c(TRUE,FALSE),
+                    mu01=c(0,.3),
+                    mu10=c(0,.3),
+                    mu11=.3,
                     errDist=c('norm','lognorm','unif'),
                     b1s=c(0,0.3,0.5),
                     oppSignsPS=TRUE,
@@ -261,8 +243,9 @@ fullsim <- function(nsim,
                     ncores=8,
                     cl=NULL,
                     start=1,
-                    estimators=list(mest=effs,bayes=bayes,psw=psw),
-                    intZfunc=\(x1,x2) sqrt(1/6)/2*(x1+x2)
+                    oneVarInt=TRUE,
+                    nox1=FALSE,
+                    geepers=TRUE,pmm=TRUE,psweight=TRUE
                     ){
 
     cases=expand.grid(
@@ -275,7 +258,7 @@ fullsim <- function(nsim,
     b1=b1s,
     intS=intS,
     intZ=intZ,
-    #intZfunc=intZfunc,
+		oneVarInt=oneVarInt,
 		stringsAsFactors=FALSE)
 
     cat(nrow(cases),' conditions\n')
@@ -286,49 +269,22 @@ fullsim <- function(nsim,
     	  cat(round(i/nrow(cases)*100),'%\n')
 	  facs <- cases[i,]
     	  res <- oneCase(nsim=nsim,ext=paste0(i,ext),
-                         ncores=ncores,cl=cl,facs=facs,estimators=estimators,intZfunc)
-	  save(res,facs,file=paste0('simResults/sim',i,ext,'.RData'))
+                       ncores=ncores,cl=cl,facs=facs,oneVarInt=oneVarInt,nox1=nox1,geepers=geepers,pmm=pmm,psweight=psweight)
+        save(res,facs,file=paste0('simResults/sim',i,ext,'.RData'))
     }
 
     return(0)
 }
 
-fullsimJustM <- function(nsim,
-                    ns=c(100,500,1000),
-                    mu01=c(0,.3),#sepTs=c(TRUE,FALSE),
-                    mu10=c(0,.3),#sepCs=c(TRUE,FALSE),
-                    mu11=.3,#effs=c(TRUE,FALSE),
-                    gumbs=c(TRUE,FALSE),
-                    b1s=c(0,0.2,0.5,1),
-                    ext='',
-                    se=TRUE,
-                    cl=NULL,
-                    Bayes=FALSE,
-		    start=1
-                    ){
-
-    cases=expand.grid(ns,mu01,mu10,mu11,gumbs,b1s)
-    names(cases) <- c('n','mu01','mu10','mu11','gumb','b1')
-
-    if(nsim==0) return(cases)
-
-    cat('% done:')
-    list(cases=cases,
-         res=lapply(
-             1:nrow(cases),
-             function(i){
-                 cat(round(i/nrow(cases)*100))
-                 replicate(nsim,effs(do.call("makeData",cases[i,])))
-             }
-         )
-         )
-}
 
 
-psw=function(dat,psMod){
+pswSim=function(dat,psMod,nox1){
 
-  if(missing(psMod)) psMod=glm(S~x1+x2,data=dat,subset=Z==1,family=binomial)
-
+  if(missing(psMod)){
+	if(nox1){
+		psMod=glm(S~x2,data=dat,subset=Z==1,family=binomial)
+		} else psMod=glm(S~x1+x2,data=dat,subset=Z==1,family=binomial)
+  }
   dat0=subset(dat,Z==0)
   dat1=subset(dat,Z==1)
   dat0$ps=predict(psMod,dat0,type='response')
@@ -345,28 +301,4 @@ psw=function(dat,psMod){
     attributes(dat)$trueEffs
     )
 }
-
-
-xSim <- function(){
-     n <- 10000
- mu01=0.2
- mu10=0
- mu11=0.5
- b1=1
- errDist='norm'
- x1 <- rnorm(2*n)
- x2 <- rnorm(2*n)
- x3 <- if(errDist=='norm') rnorm(2*n) else runif(2*n,-sqrt(12)/2,sqrt(12)/2)
- x1 <- x1-mean(x1)
- x2 <- x2-mean(x2)
- x3 <- x3-mean(x3)
- psTrue <- plogis(b1*(x1+x3)-b1*x2)
- S <- rbinom(2*n,1,psTrue)
- Z <- rep(c(1,0),n)
- x12 <- x1+x2
-     c(mean(x12),
-       mean(x12[S==1]),
-       mean(x12[S==0]))
-}
-
 

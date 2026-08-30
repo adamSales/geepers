@@ -66,6 +66,17 @@ proc1mest <- function(res1){
   )
 }
 
+proc1pstrata <- function(res1){
+  tibble(
+    eff=c(0,1),
+    estimator="pstrata",
+    est=res1$pstrata[,"mean"],
+    se=res1$pstrata[,"sd"],
+    CIpercL=res1$pstrata[,"2.5%"],
+    CIpercU=res1$pstrata[,"97.5%"]
+  )
+}
+
 proc1bayes <- function(res1){
   tibble(
     eff = c(0,1),

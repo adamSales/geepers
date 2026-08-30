@@ -34,7 +34,7 @@ tikzLualatexPackages = c(
 )
 )
 
-source('code/simulation/readSimFuncs.r')
+source('simulation/code/readSimFuncs.r')
 
 #### after simulation results have been loaded and pre-processed...
 ## source('code/simulation/readSim.r')
@@ -162,7 +162,7 @@ biasB1 <- pdb1%>%
     bind_cols(.$ttest)%>%
     select(-ttest)
 
-  summarize(bias=mean(errP,na.rm=TRUE))%>%ungroup()
+  #summarize(bias=mean(errP,na.rm=TRUE))%>%ungroup()
 
 seB1 <- pdb1%>%
     filter(rhat<1.1,!is.na(errP))%>%
@@ -241,7 +241,6 @@ nonconvMain <- pd%>%
     summarize(nonconv=sum(rhat>=1.1),percNonconv=nonconv/n())
 
 
-
 ### figure for paper
 
 violin <- bp(filter(pd,rhat<1.1),
@@ -260,6 +259,9 @@ violin <- bp(filter(pd,rhat<1.1),
                                         #plot.subtitle = element_text(size=10),)+
   scale_fill_manual(values=c('#1b9e77','#d95f02','#7570b3'))+
   scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3'))
+
+
+
 
 
 #pdf(
@@ -317,38 +319,6 @@ select(-xx))%>%#GEEPERs,Mix.,PSW))%>%
 sink()
 
 
-## sink('paper/rmseTabAppendix1000.tex')
-
-## cbind(
-## rmse%>%filter(errDist!='mix',n==1000,eff!="Diff",b1==.2)%>%
-##   transmute(`Residual\nDist.`=c(norm='Normal',lognorm="Lognormal",unif='Uniform')[errDist],
-##          `$\\bm{x}:Z$\nInt.?`=ifelse(intZ,'Yes','No'),
-##          `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
-##          estimator,#=c(Mixture="\\pmm",GEEPERs="\\geepers",PSW="\\psw")[estimator],
-##          `$\\beta_1$`=mu01,
-##          `Prin.\nEff`=paste0('$\\tau^',eff,'$'),
-##          rmse)%>%
-## pivot_wider(names_from=estimator,values_from=rmse),
-## rmse%>%filter(errDist!='mix',n==1000,mu01==0,eff!="Diff",b1==.5)%>%
-##   transmute(#`Res.\nDist.`=c(norm='Norm.',unif='Unif.')[errDist],
-##          `$\\bm{x}:Z$\nInt.?`=ifelse(intZ,'Yes','No'),
-##          `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
-##          estimator,#=c(Mixture="\\pmm",GEEPERs="\\geepers",PSW="\\psw")[estimator],
-##          n,
-##          `$\\beta_1$`=mu01,
-##          `Prin.\nEff`=paste0('$\\tau^',eff,'$'),
-##          rmse,
-##          xx=rep(1:(n()/3),each=3))%>%
-## select(xx,estimator,rmse)%>%
-## pivot_wider(names_from=estimator,values_from=rmse)%>%
-## select(-xx))%>%#GEEPERs,Mix.,PSW))%>%
-##     kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
-##   add_header_above(c(" " = 5,  "$\\\\alpha=0.3$" = 3, "$\\\\alpha=0.5$" = 3),escape=FALSE)%>%
-## add_header_above(c(" " = 5,  "$n=1000$"=6),escape=FALSE)%>%
-##     collapse_rows(columns=1,latex_hline="major",valign="middle")
-
-## sink()
-
 
 
 #######################################################
@@ -364,7 +334,7 @@ sink()
 redCov <- function(coverage) paste0("\\rd{",sprintf("%.2f",coverage),"}")
 condRed <- function(coverage,intZ,intS,estimator,errDist,b1=1)
     ifelse(intZ|intS,redCov(coverage),
-    ifelse(errDist=="unif"&estimator=="\\textsc{pmm}",redCov(coverage),
+    ifelse(errDist%in%c("unif","lognorm")&estimator=="\\textsc{pmm}",redCov(coverage),
     ifelse(estimator=="\\textsc{geepers}"&b1==0,redCov(coverage),sprintf("%.2f",coverage))))
 
 
@@ -398,7 +368,7 @@ sink()
 #### type-1 error
 #######################################################
 type1err <- pd%>%
-  filter(rhat<1.1,estimator!='\\textsc{psw}',eff==0)%>%
+  filter(rhat<1.1,estimator!='\\textsc{psw}',eff==0,!intZ)%>%
   group_by(n,mu01,errDist,dist,b1,intS,intZ,interactionS,interactionZ,eff,estimator)%>%
    summarize(type1err=mean(abs(est)>2*se))%>%ungroup()
 
@@ -472,53 +442,6 @@ kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>
     add_header_above(c(" " = 5, "$n=500$"=6),escape=FALSE)%>%
   collapse_rows(columns=1,latex_hline="major",valign="middle")
 sink()
-
-### #######################
-## ## coverage tab for appendix: n=1000
-## ########################
-## sink('paper/coverageTabAppendix1000.tex')
-## cbind(
-##     coverage%>%filter(errDist!='mix',eff!="Diff",b1==0,estimator!='\\textsc{psw}',n==1000
-##                       )%>%
-##   transmute(`Residual\nDist.`=c(norm='Normal',unif='Uniform')[errDist],
-##          `$\\bm{x}:Z$\nInt.?`=ifelse(intZ,'Yes','No'),
-##          `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
-##          estimator,#=ifelse(estimator=='Mixture','\\pmm',"\\geepers"),
-##          `$\\beta_1$`=mu01,
-##          `Prin.\nEff`=paste0('$\\tau^',eff,'$'),
-##          coverage=sprintf("%.2f", coverage),#round(coverage,2),
-##          coverage=ifelse(intZ|intS|(errDist=="unif"&estimator=="\\textsc{pmm}"),paste0("\\rd{",coverage,"}"),coverage))%>%
-## pivot_wider(names_from=estimator,values_from=coverage),
-## coverage%>%filter(errDist!='mix',eff!="Diff",b1==.2,estimator!='PSW',n==1000)%>%
-##   transmute(`Residual\nDist.`=c(norm='Normal',unif='Uniform')[errDist],
-##          `$\\bm{x}:Z$\nInt.?`=ifelse(intZ,'Yes','No'),
-##          `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
-##          estimator,#=ifelse(estimator=='Mixture','\\pmm',"\\geepers"),
-##          `$\\beta_1$`=mu01,
-##          `Prin.\nEff`=paste0('$\\tau^',eff,'$'),
-##          coverage=sprintf("%.2f", coverage),#round(coverage,2),
-##          coverage=ifelse(intZ|intS|(errDist=="unif"&estimator=="\\textsc{pmm}"),paste0("\\rd{",coverage,"}"),coverage))%>%
-## pivot_wider(names_from=estimator,values_from=coverage)%>%
-## select(`\\textsc{geepers}`,`\\textsc{pmm}`),
-## coverage%>%filter(errDist!='mix',n==1000,eff!="Diff",b1==.5,estimator!='\\textsc{psw}')%>%
-##   transmute(`Residual\nDist.`=c(norm='Normal',unif='Uniform')[errDist],
-##          `$\\bm{x}:Z$\nInt.?`=ifelse(intZ,'Yes','No'),
-##          `$\\bm{x}:S_T$\nInt.?`=ifelse(intS,'Yes','No'),
-##          estimator,#=ifelse(estimator=='Mixture','\\pmm',"\\geepers"),
-##          n,
-##          `$\\beta_1$`=mu01,
-##          `Prin.\nEff`=paste0('$\\tau^',eff,'$'),
-##          coverage=sprintf("%.2f", coverage),#round(coverage,2),
-##          coverage=ifelse(intZ|intS|(errDist=="unif"&estimator=="\\textsc{pmm}"),paste0("\\rd{",coverage,"}"),coverage))%>%
-## pivot_wider(names_from=estimator,values_from=coverage)%>%
-## select(`\\textsc{geepers}`,`\\textsc{pmm}`))%>%
-## kbl('latex',booktabs=TRUE,col.names=linebreak(names(.)),escape=FALSE,digits=2)%>%
-##     add_header_above(c(" " = 5, "$\\\\alpha=0$" = 2, "$\\\\alpha=0.3$" = 2, "$\\\\alpha=0.5$" = 2),escape=FALSE)%>%
-##     add_header_above(c(" " = 5, "$n=1000$"=6),escape=FALSE)%>%
-##   collapse_rows(columns=1,latex_hline="major",valign="middle")
-## sink()
-
-
 
 
 ### how does AUC very w b1 and n?
@@ -683,10 +606,36 @@ bind_rows(
     add_header_above(c(" " = 3, "Error Distribution"=6))%>%
     collapse_rows(columns=1,latex_hline="major",valign="middle")%>%
     collapse_rows(columns=2,latex_hline="none",valign="middle")%>%
-    footnote(general=c("\\\\footnotesize Based on 5000 replications. $n=500$. Simulation standard error $\\\\approx 1/3$ percentage point. Estimates colored \\\\rd{red} indicate cases where the assumptions of the model are not met."),escape=FALSE,footnote_as_chunk = TRUE,threeparttable=TRUE)%>%print()
+    footnote(general=c("\\\\footnotesize Based on 5000 replications. $n=500$. Simulation standard error $\\\\approx 1/3$ percentage point."),escape=FALSE,footnote_as_chunk = TRUE,threeparttable=TRUE)%>%print()
 sink()
 
+### standard error estimates?
+results%>%filter(estimator=="mest",eff==1,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(seError)%>%print(n=Inf)
 
-bind_cols(
-    filter(biasTab,errDist=="norm")%>%select(b1,estimator,bias,bias2),
-    filter(biasTab,errDist=="lognorm")%>%select(
+
+results%>%filter(estimator=="mest",eff==0,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(seError)%>%print(n=Inf)
+
+results%>%filter(estimator=="mest",eff==1,b1>0,run==14)%>%pull(se)%>%hist()
+
+
+results%>%filter(estimator=="bayes",eff==1,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(seError)%>%print(n=Inf)
+
+
+results%>%filter(estimator=="mest",eff==0,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(seError)%>%print(n=Inf)
+
+
+resultsNs%>%filter(estimator=="mest",eff==1,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(n)%>%print(n=Inf)
+
+resultsB1s%>%filter(estimator=="mest",eff==1,b1>0,se<100)%>%group_by(run,n,b1,errDist,intS,intZ)%>%
+  summarise(trueVar=var(est),EestVar=mean(se^2),seError=EestVar-trueVar,
+            pval=t.test(se^2,mu=trueVar)$p.value)%>%arrange(b1)%>%print(n=Inf)

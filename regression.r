@@ -79,8 +79,9 @@ datNames <- function(data,trt='Z',out='Y',use='S',clust=NULL,block=NULL){
 
 getPointEst <- function(outMod,covFormY,data){
 
-    xbar0 <- colMeans(model.matrix(covFormY,data=data[data$Z==1&data$S==0,])[,-1])
-    xbar1 <- colMeans(model.matrix(covFormY,data=data[data$Z==1&data$S==1,])[,-1])
+
+    xbar0 <- colMeans(model.matrix(covFormY,data=data[data$Z==1&data$S==0,])[,-1,drop=FALSE])
+    xbar1 <- colMeans(model.matrix(covFormY,data=data[data$Z==1&data$S==1,])[,-1,drop=FALSE])
 
     stopifnot(all.equal(names(xbar0),names(xbar1)))
 
