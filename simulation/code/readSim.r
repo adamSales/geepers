@@ -27,6 +27,43 @@ if(file.exists("simResults/b1sResults.RData")&!fromScratch){
 }
 
 
+if(file.exists("simResults/lognormResults.RData")&!fromScratch){
+    load("simResults/lognormResults.RData")
+} else{
+    resultsLN <- loadRes(ext2="lognorm")
+    save(resultsLN,file="simResults/lognormResults.RData")
+}
+
+if(file.exists("simResults/oneVarIntResults.RData")&!fromScratch){
+    load("simResults/oneVarIntResults.RData")
+} else{
+    resultsInt <- loadRes(ext2="oneVarInt")
+    save(resultsInt,file="simResults/oneVarIntResults.RData")
+}
+
+if(file.exists("simResults/nox1Results.RData")&!fromScratch){
+    load("simResults/nox1Results.RData")
+} else{
+    resultsNox1 <- loadRes(ext2="oneVarIntnox1")
+    save(resultsNox1,file="simResults/nox1Results.RData")
+}
+
+
+
+
+
+results <- bind_rows(
+    filter(results,errDist!="lognorm"),
+    resultsLN)%>%
+    filter(!intZ)%>%
+    bind_rows(resultsInt)
+
+save(results,file='simResults/mainResults.RData')
+
+
+#resultsN100=loadRes(ext2='n100_mu01is0')
+#save(resultsN100,file='simResults/resultsN100.RData')
+
 
 ### merge results by n
 load("simResults/casesns.RData")#_mu01is0.RData')
@@ -61,3 +98,53 @@ resultsB1s=bind_rows(
     ))
   )
 save(resultsB1s,file='simResults/resultsB1s.RData')
+
+
+
+### quick look
+results%>%filter(b1>0,n==500,eff==1,errDist!="lognorm")%>%
+    group_by(mu01,mu10,mu11,b1,errDist,intS,intZ,estimator)%>%
+    summarize(
+        bias=mean(est-pop),
+        realSE=sd(est-samp),
+        covr=mean(CIpercL<samp&CIpercU>samp))%>%print(n=Inf)
+
+
+resultsLN%>%filter(b1>0,n==500,eff==1)%>%
+    group_by(mu01,mu10,mu11,b1,errDist,intS,intZ,estimator)%>%
+    summarize(
+        bias=mean(est-pop),
+        realSE=sd(est-samp),
+        covr=mean(CIpercL<samp&CIpercU>samp))%>%print(n=Inf)
+
+
+resultsLN%>%filter(b1>0,n==500,eff==1,estimator=="pstrata")%>%
+    group_by(mu01,mu10,mu11,b1,errDist,intS,intZ,estimator)%>%
+    summarize(
+        bias=mean(est-pop),
+        realSE=sd(est-samp),
+        covr=mean(CIpercL<samp&CIpercU>samp))%>%print(n=Inf)
+resultsLN%>%filter(b1>0,n==500,eff==1,estimator=="mest")%>%
+    group_by(mu01,mu10,mu11,b1,errDist,intS,intZ,estimator)%>%
+    summarize(
+        bias=mean(est-pop),
+        realSE=sd(est-samp),
+        covr=mean(CIpercL<samp&CIpercU>samp))%>%print(n=Inf)
+
+
+summ <- results%>%filter(b1>0,n==500,eff==1,intZ=TRUE)%>%
+    group_by(mu01,mu10,mu11,b1,errDist,intS,intZ,estimator)%>%
+    summarize(
+        bias=mean(est-pop),
+        realSE=sd(est-samp),
+        covr=mean(CIpercL<samp&CIpercU>samp))%>%print(n=Inf)
+
+filter(summ,intZ)%>%print(n=Inf)
+
+
+resultsNox1%>%filter(estimator=="mest",b1>0,eff==1)%>%
+    group_by(mu01,mu10,mu11,b1,errDist,intS,intZ,estimator)%>%
+    summarize(
+        bias=mean(est-pop),
+        realSE=sd(est-samp),
+        covr=mean(CInormL<samp&CInormU>samp))%>%print(n=Inf)
